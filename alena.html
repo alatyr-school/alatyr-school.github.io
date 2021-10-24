@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en" >
+
+<head>
+
+  <meta charset="UTF-8">
+  
+<link rel="apple-touch-icon" type="image/png" href="https://cpwebassets.codepen.io/assets/favicon/apple-touch-icon-5ae1a0698dcc2402e9712f7d01ed509a57814f994c660df9f7a952f3060705ee.png" />
+<meta name="apple-mobile-web-app-title" content="CodePen">
+
+<link rel="shortcut icon" type="image/x-icon" href="https://cpwebassets.codepen.io/assets/favicon/favicon-aec34940fbc1a6e787974dcd360f2c6b63348d4b1f4e06c77743096d55480f33.ico" />
+
+<link rel="mask-icon" type="image/x-icon" href="https://cpwebassets.codepen.io/assets/favicon/logo-pin-8f3771b1072e3c38bd662872f6b673a722f4b3ca2421637d5596661b4e2132cc.svg" color="#111" />
+
+
+  <title>&#39;s card</title>
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/meyer-reset/2.0/reset.min.css">
+
+  
+  
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Abril+Fatface&display=swap'); 
+@import url('https://fonts.googleapis.com/css?family=Shadows+Into+Light&display=swap');
+
+
+  --background: #F3F0D7;
+  --background-decor: #DBD0C0;
+  
+
+
+  --banner-bg: #1C0C5B;
+  --banner-txt: white;
+
+
+  --message-bg: #F1EDE9;
+  --message-line: #94ACD4;
+  --message-txt: #333333;
+
+
+  --font-banner: 'Abril Fatface', cursive;
+  --font-text: 'Shadows Into Light', cursive;
+
+  /* Space and other details */
+  --space: 16px;
+  --space-xsm: 4px;
+  --space-sm: 8px;
+  --space-lg: 24px;
+  --space-xlg: 48px;
+}
+
+/* Base template configurations */ 
+body {
+  min-height: 100vh;
+  width: 100vw;
+  display: flex;
+  justify-content: center;
+  overflow-x: hidden;
+
+  /* background color - here we are using the variable we created earlier! */ 
+  background-color: var(--background);
+
+  /* background pattern - remove the lines below and paste the new code if you want to use a different style */ 
+  background-image: radial-gradient(var(--background-decor) 20%, transparent 0), radial-gradient(var(--background-decor) 20%, transparent 0);
+  background-size: 30px 30px;
+  background-position: 0 0, 15px 15px;
+
+}
+
+.bday-card {
+  max-width: 420px;
+  height: 100%;
+  padding-top: var(--space-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  position: relative;
+}
+
+.bday-pic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 280px;
+  height: 240px;
+  padding: var(--space-sm) var(--space-sm) var(--space-xlg);
+  background: white;
+  border-radius: 4px;
+  box-shadow: var(--space-xsm) var(--space-xsm) 15px rgba(0,0,0, .15);
+
+  /* Edit the Translate property below to adjust the position of your picture */ 
+  transform: rotate(5deg) translate(20px, 45px);
+}
+
+.bday-pic img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.bday-decor--container {
+  position: relative;
+}
+
+.bday-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: baseline;
+  font-size: 42px;
+  z-index: 1;
+
+  /* Play around with those properties to change your banner styling */ 
+  color: var(--banner-txt);
+  font-family: var(--font-banner);
+  text-transform: uppercase;
+  transform: rotate(-5deg);
+  gap: var(--space-sm) 0;
+}
+
+.bday-banner span {
+  background: var(--banner-bg);
+  padding: var(--space) var(--space-lg);
+  flex-grow: 0;
+}
+
+.bday-banner span:nth-child(2) {
+  margin-left: var(--space-lg);
+}
+
+
+.bday-message {
+  max-width: 80%;
+  padding: 35px var(--space);
+  font-family: var(--font-text);
+  font-size: 18px;
+  line-height: 32px;
+  color: var(--message-txt);
+  background-color: var(--message-bg);
+}
+
+/* Paper */
+.bday-message--paper {
+  background: repeating-linear-gradient(var(--message-bg), var(--message-bg) 31px, var(--message-line) 31px, var(--message-line) 32px);
+  box-shadow: var(--space-xsm) var(--space-xsm) 15px rgba(0,0,0, .15);
+}
+/* End - Paper */
+
+/* Block right */
+.bday-message--block-right {
+  position: relative;
+}
+
+.bday-message--block-right::before {
+  content: "";
+  width: 100vw;
+  height: 100%;
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--paper);
+  z-index: -1;
+}
+/* End - Block right */
+
+/* Block left */
+.bday-message--block-left {
+  position: relative;
+}
+
+.bday-message--block-left::before {
+  content: "";
+  width: 100vw;
+  height: 100%;
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--paper);
+  z-index: -1;
+}
+/* End - Block left */
+
+
+.bday-decor {
+  /* Emojis are text - so here we are setting a font-size to make them bigger */ 
+  font-size: 96px;
+}
+
+/* Positioning for the emojis - play around with the values to change the placement of your decorations */ 
+.bday-decor--top-right { 
+  position: absolute;
+  bottom: -70px;
+  right: -20px;
+}
+
+.bday-decor--top-left {
+  position: absolute;
+  bottom: 0px;
+  left: -25px;
+}
+
+.bday-decor--bottom-right {
+  position: absolute; 
+  right: 20px;
+}
+
+/* Animations */ 
+
+/* Here we designate an specific animation to an specific element using a class. We have a defined name, time and iteration-count for each animation. We can also define the origin point from which the animation will happen - the default is the center. */  
+.zoom-left-in-out {
+  animation-name: zoom-left-in-out;
+  animation-duration: 1.75s;
+  animation-iteration-count: infinite;
+  transform-origin: left bottom;
+}
+
+/* Here we specify what will change on the element when they animate */ 
+@keyframes zoom-left-in-out {
+  /* Animation will start and end with the same settings */ 
+  0%, 100% {
+    transform: scale(0.95) rotate(2deg);
+  }
+
+  /* Animation will reach those settings 50% into the duration time we set on the declaration */
+  50% {
+    transform: scale(1) rotate(-2deg);
+  }
+}
+
+/* pulse */ 
+.pulse {
+  animation-name: pulse;
+  animation-duration: 1.3s;
+  animation-iteration-count: infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(0.9);
+  }
+
+  50% {
+    transform: scale(1);
+  }
+}
+/* pulse - End */
+
+/* float */ 
+.float {
+  animation-name: float;
+  animation-duration: 1.9s;
+  animation-iteration-count: infinite;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(10px);
+  }
+}
+/* float - End */
+
+/* spin */ 
+.spin {
+  animation-name: spin;
+  animation-duration: 3s;
+  animation-iteration-count: infinite;
+  animation-timing-function: linear; 
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* spin - End */
+</style>
+
+  <script>
+  window.console = window.console || function(t) {};
+</script>
+
+  
+  
+  <script>
+  if (document.location.search.match(/type=embed/gi)) {
+    window.parent.postMessage("resize", "*");
+  }
+</script>
+
+
+</head>
+
+<body translate="no" >
+  <div class="bday-card">
+  
+  <!-- Top part of the card: image + decorations -->
+  <div class="bday-decor--container">
+
+    <div class="bday-pic "> 
+      <img src="https://images.unsplash.com/photo-1572451479139-6a308211d8be?ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&ixlib=rb-1.2.1&auto=format&fit=crop&w=2670&q=80">
+    </div>
+
+    <p class="bday-decor bday-decor--top-right float">🎈</p>
+    <p class="bday-decor bday-decor--top-left spin">🌼</p>
+
+  </div> 
+
+
+  <!-- Banner --> 
+  <h1 class="bday-banner">
+    <span>Good day</span> <span>To you</span>
+  </h1> 
+
+   <!-- Message + decoration -->
+  <div class="bday-message bday-message--paper">
+    <p>Ana, yet another year that we get to celebrate together! Hope you have a great day, and may your new age be full of health, love and laughter. Love you loads <br> Camila</p> 
+    <p class="bday-decor bday-decor--bottom-right zoom-left-in-out">🎉</p>
+  </div>
+
+</div>
+    <script src="https://cpwebassets.codepen.io/assets/common/stopExecutionOnTimeout-1b93190375e9ccc259df3a57c1abc0e64599724ae30d7ea4c6877eb615f89387.js"></script>
+
+  
+      <script id="rendered-js" >
+// base template - change details, fonts, and colors
+//# sourceURL=pen.js
+    </script>
+
+  
+
+</body>
+
+</html>
