@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="en" >
 
@@ -13,7 +15,7 @@
 <link rel="mask-icon" type="image/x-icon" href="https://cpwebassets.codepen.io/assets/favicon/logo-pin-8f3771b1072e3c38bd662872f6b673a722f4b3ca2421637d5596661b4e2132cc.svg" color="#111" />
 
 
-  <title>&#39;s card</title>
+  <title>CodePen - Camila&#39;s card</title>
   
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/meyer-reset/2.0/reset.min.css">
 
@@ -23,21 +25,24 @@
 @import url('https://fonts.googleapis.com/css2?family=Abril+Fatface&display=swap'); 
 @import url('https://fonts.googleapis.com/css?family=Shadows+Into+Light&display=swap');
 
-
+/* Defining the theme for the card: colors, fonts, spacing. 
+This uses CSS variables - so you only have to change the colors in one place */ 
+:root {
+  /* The color for your card background and background pattern */ 
   --background: #F3F0D7;
   --background-decor: #DBD0C0;
   
 
-
+  /* Colors for the elements on your card */ 
   --banner-bg: #1C0C5B;
   --banner-txt: white;
 
-
+  /* Message area colors */ 
   --message-bg: #F1EDE9;
   --message-line: #94ACD4;
   --message-txt: #333333;
 
-
+  /* Fonts */ 
   --font-banner: 'Abril Fatface', cursive;
   --font-text: 'Shadows Into Light', cursive;
 
@@ -316,7 +321,7 @@ body {
 
   <!-- Banner --> 
   <h1 class="bday-banner">
-    <span>Good day</span> <span>To you</span>
+    <span>Happy</span> <span>Birthday</span>
   </h1> 
 
    <!-- Message + decoration -->
@@ -339,3 +344,4 @@ body {
 </body>
 
 </html>
+ 
