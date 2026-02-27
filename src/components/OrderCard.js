@@ -6,12 +6,12 @@ import { TouchButton } from "./ui/TouchButton.js";
 const html = htm.bind(React.createElement);
 
 const statusActions = {
-  new: [{ label: "Start Prep", nextStatus: "prep", tone: "primary" }],
+  new: [{ label: "Start Prep", nextStatus: "prep", tone: "forward" }],
   prep: [
-    { label: "Mark Ready", nextStatus: "ready", tone: "success" },
-    { label: "Back to New", nextStatus: "new", tone: "ghost" },
+    { label: "Mark Ready", nextStatus: "ready", tone: "confirm" },
+    { label: "Back to New", nextStatus: "new", tone: "reverse" },
   ],
-  ready: [{ label: "Back to Prep", nextStatus: "prep", tone: "ghost" }],
+  ready: [{ label: "Back to Prep", nextStatus: "prep", tone: "reverse" }],
 };
 
 function formatDuration(elapsedMs) {
@@ -52,11 +52,12 @@ export function OrderCard({
       }`}
     >
       <header className="order-card__header">
-        <div>
+        <div className="order-card__identity">
+          <p className="order-card__label">Ticket</p>
           <h3 className="order-card__title">Order #${order.order_number}</h3>
           <p className="order-card__meta">${items.length} items</p>
         </div>
-        <div className="order-card__timer-group">
+        <div className="order-card__time-block">
           <span className=${`timer-pill ${isLate ? "timer-pill--late" : ""}`}>
             ${formatDuration(elapsedMs)}
           </span>
@@ -66,33 +67,35 @@ export function OrderCard({
         </div>
       </header>
 
-      <ul className="order-items">
-        ${items.map(
-          (item) => html`
-            <li key=${item.id} className="order-item">
-              <div className="order-item__line">
-                <span className="order-item__qty">${item.quantity}x</span>
-                <span className="order-item__name">${item.item_name}</span>
-              </div>
-              ${(item.modifiers ?? []).length > 0
-                ? html`
-                    <div className="modifier-row">
-                      ${(item.modifiers ?? []).map(
-                        (modifier) => html`
-                          <span key=${`${item.id}-${modifier}`} className="modifier-chip"
-                            >${modifier}</span
-                          >
-                        `
-                      )}
-                    </div>
-                  `
-                : null}
-            </li>
-          `
-        )}
-      </ul>
+      <section className="order-card__items-area">
+        <ul className="order-items">
+          ${items.map(
+            (item) => html`
+              <li key=${item.id} className="order-item">
+                <div className="order-item__line">
+                  <span className="order-item__qty">${item.quantity}x</span>
+                  <span className="order-item__name">${item.item_name}</span>
+                </div>
+                ${(item.modifiers ?? []).length > 0
+                  ? html`
+                      <div className="modifier-row">
+                        ${(item.modifiers ?? []).map(
+                          (modifier) => html`
+                            <span key=${`${item.id}-${modifier}`} className="modifier-chip"
+                              >${modifier}</span
+                            >
+                          `
+                        )}
+                      </div>
+                    `
+                  : null}
+              </li>
+            `
+          )}
+        </ul>
+      </section>
 
-      <div className="order-card__actions">
+      <div className="order-card__action-zone">
         ${actions.map(
           (action) => html`
             <${TouchButton}

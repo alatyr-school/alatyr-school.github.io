@@ -1,64 +1,70 @@
 # KDS Design System
 
-## Principles
+This repo now uses a **premium operational design language** for the KDS interface.
 
-1. **Readable at distance**: high contrast, large numerals, bold hierarchy.
-2. **Glove-friendly controls**: minimum touch target `3.5rem` for critical actions.
-3. **Urgency-first**: late orders and queue pressure are visually elevated.
-4. **Operational speed**: controls minimize taps for filtering and status movement.
+For full redesign guidance see:
 
-## Token Layers (index.css)
+- `docs/kds-premium-redesign-package.md`
 
-- **Color tokens**: `--color-*` (surface, text, state tones).
-- **Spacing tokens**: `--space-*`.
-- **Typography tokens**: `--text-*`.
-- **Radius tokens**: `--radius-*`.
-- **Touch target token**: `--touch-target`.
+## Core principles
 
-## UI Primitives
+1. **Command-layer clarity** for rapid kitchen decisions.
+2. **Executive metric readability** without visual noise.
+3. **Card-first object model** where each order is a strong system entity.
+4. **Disciplined state accents** (critical/warning/success), no neon overload.
+
+## Token groups (index.css)
+
+- Surface/background: `--bg-*`, `--surface-*`
+- Borders: `--border-*`
+- Text: `--text-*`
+- Semantic states: `--state-*`
+- Radius/spacing/type scales: `--radius-*`, `--space-*`, `--type-*`
+
+## UI primitives
 
 ### `TouchButton`
 
 Path: `src/components/ui/TouchButton.js`
 
-Variants:
+Current variants:
 
-- `primary`: move to prep / primary line action
-- `success`: completion / handoff
-- `ghost`: secondary controls
-- `danger`: destructive/escalation actions
+- `forward`: workflow progression action
+- `confirm`: completion action
+- `reverse`: backward workflow action
+- `secondary`: utility action (e.g., refresh/reset)
+- `passive`: command/filter toggles
+- `ghost`: fallback neutral
 
 Sizes:
 
-- `md`: toolbars and filters
-- `lg`: order-card action area
+- `md` (toolbar/control layer)
+- `lg` (order-card action zone)
 
 ### `MetricTile`
 
 Path: `src/components/ui/MetricTile.js`
 
-Displays operational KPIs in tones:
+Tones:
 
-- `success`
+- `default`
 - `warning`
 - `danger`
-- `default`
+- `success`
 
-## Dashboard Capability Set
+## Dashboard capability set
 
 Path: `src/components/KDSDashboard.js`
 
-- Search by order number, item name, modifier text.
-- Late-only toggle.
-- Sort modes: oldest first, urgency first.
-- Density modes: comfortable, compact.
-- Sound alert toggle for newly late orders.
-- KPI strip: Active, Late, Average Wait, Ready.
+- Integrated command architecture (identity + indicators + control matrix)
+- Search, filters, sort, density, sound toggle
+- KPI strip with restrained semantic emphasis
+- Workflow board with staged columns and order-card priority
 
-## KDS Constants
+## Shared KDS constants
 
 Path: `src/constants/kds.js`
 
 - `FIFTEEN_MINUTES_MS`
 - `BOARD_COLUMNS`
-- shared helpers: elapsed time, late detection, search matching
+- elapsed/late/search helper functions

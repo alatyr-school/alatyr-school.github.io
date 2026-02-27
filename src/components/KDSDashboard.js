@@ -13,6 +13,12 @@ import { TouchButton } from "./ui/TouchButton.js";
 
 const html = htm.bind(React.createElement);
 
+const COLUMN_PRESENTATION = {
+  new: { sequence: "01", subtitle: "Incoming queue" },
+  prep: { sequence: "02", subtitle: "On the line" },
+  ready: { sequence: "03", subtitle: "Handoff window" },
+};
+
 function buildDemoOrders() {
   const now = Date.now();
   return [
@@ -287,132 +293,148 @@ export function KDSDashboard() {
       ? "Live"
       : connectionState
     : "Demo";
+  const queueHealthLabel =
+    lateOrders > 0 ? `${lateOrders} delayed` : "On cadence";
 
   return html`
     <main className="kds-dashboard">
-      <header className="kds-topbar">
-        <div>
-          <h1>Kitchen Display System</h1>
-          <p className="kds-topbar__subtitle">
-            Realtime order board for hot line execution
-          </p>
-        </div>
-        <div className="kds-topbar__actions">
-          <span className=${statusClass(currentConnectionState)}>
-            ${currentConnectionLabel}
-          </span>
-          ${isSupabaseConfigured
-            ? html`
-                <${TouchButton}
-                  label="Refresh"
-                  variant="ghost"
-                  size="md"
-                  onClick=${reloadOrders}
-                />
-              `
-            : html`
-                <${TouchButton}
-                  label="Reset Demo"
-                  variant="ghost"
-                  size="md"
-                  onClick=${() => setDemoOrders(buildDemoOrders())}
-                />
-              `}
-        </div>
-      </header>
+      <section className="kds-command-surface">
+        <header className="kds-command-head">
+          <div className="kds-identity">
+            <p className="kds-identity__eyebrow">Kitchen operations console</p>
+            <h1>Kitchen Display System</h1>
+            <p className="kds-topbar__subtitle">
+              Realtime production command layer for high-volume service
+            </p>
+          </div>
+          <div className="kds-topbar__actions">
+            <div className="kds-passive-indicators">
+              <span className=${statusClass(currentConnectionState)}>
+                ${currentConnectionLabel}
+              </span>
+              <span className="status-pill status-pill--passive">
+                ${queueHealthLabel}
+              </span>
+            </div>
+            ${isSupabaseConfigured
+              ? html`
+                  <${TouchButton}
+                    label="Refresh"
+                    variant="secondary"
+                    size="md"
+                    onClick=${reloadOrders}
+                  />
+                `
+              : html`
+                  <${TouchButton}
+                    label="Reset Demo"
+                    variant="secondary"
+                    size="md"
+                    onClick=${() => setDemoOrders(buildDemoOrders())}
+                  />
+                `}
+          </div>
+        </header>
 
-      <section className="kds-toolbar">
-        <div className="toolbar-search">
-          <label className="toolbar-label" htmlFor="kds-search">Search</label>
-          <input
-            id="kds-search"
-            className="toolbar-input"
-            type="text"
-            value=${searchText}
-            placeholder="Order #, item, modifier..."
-            onInput=${(event) => setSearchText(event.target.value)}
-          />
-        </div>
-
-        <div className="toolbar-group">
-          <span className="toolbar-label">Filters</span>
-          <div className="toolbar-actions">
-            <${TouchButton}
-              label="Late only"
-              variant="ghost"
-              size="md"
-              isActive=${lateOnly}
-              onClick=${() => setLateOnly((current) => !current)}
-            />
-            <${TouchButton}
-              label=${audioEnabled ? "Sound on" : "Sound off"}
-              variant=${audioEnabled ? "success" : "ghost"}
-              size="md"
-              isActive=${audioEnabled}
-              onClick=${() => setAudioEnabled((current) => !current)}
+        <section className="kds-control-architecture">
+          <div className="control-cluster control-cluster--search">
+            <label className="toolbar-label" htmlFor="kds-search">Search</label>
+            <input
+              id="kds-search"
+              className="toolbar-input"
+              type="text"
+              value=${searchText}
+              placeholder="Find by order #, item or modifier"
+              onInput=${(event) => setSearchText(event.target.value)}
             />
           </div>
-        </div>
 
-        <div className="toolbar-group">
-          <label className="toolbar-label" htmlFor="kds-sort">Sort</label>
-          <select
-            id="kds-sort"
-            className="toolbar-select"
-            value=${sortMode}
-            onChange=${(event) => setSortMode(event.target.value)}
-          >
-            <option value="oldest">Oldest first</option>
-            <option value="urgency">Urgency first</option>
-          </select>
-        </div>
-
-        <div className="toolbar-group">
-          <span className="toolbar-label">Density</span>
-          <div className="toolbar-actions">
-            <${TouchButton}
-              label="Comfortable"
-              variant="ghost"
-              size="md"
-              isActive=${density === "comfortable"}
-              onClick=${() => setDensity("comfortable")}
-            />
-            <${TouchButton}
-              label="Compact"
-              variant="ghost"
-              size="md"
-              isActive=${density === "compact"}
-              onClick=${() => setDensity("compact")}
-            />
+          <div className="control-cluster control-cluster--filters">
+            <span className="toolbar-label">Filters</span>
+            <div className="toolbar-actions">
+              <${TouchButton}
+                label="Late only"
+                variant="passive"
+                size="md"
+                isActive=${lateOnly}
+                onClick=${() => setLateOnly((current) => !current)}
+              />
+              <${TouchButton}
+                label=${audioEnabled ? "Sound on" : "Sound off"}
+                variant="passive"
+                size="md"
+                isActive=${audioEnabled}
+                onClick=${() => setAudioEnabled((current) => !current)}
+              />
+            </div>
           </div>
-        </div>
+
+          <div className="control-cluster control-cluster--sort">
+            <label className="toolbar-label" htmlFor="kds-sort">Sort</label>
+            <select
+              id="kds-sort"
+              className="toolbar-select"
+              value=${sortMode}
+              onChange=${(event) => setSortMode(event.target.value)}
+            >
+              <option value="oldest">Oldest first</option>
+              <option value="urgency">Urgency first</option>
+            </select>
+          </div>
+
+          <div className="control-cluster control-cluster--density">
+            <span className="toolbar-label">Density</span>
+            <div className="toolbar-actions">
+              <${TouchButton}
+                label="Comfortable"
+                variant="passive"
+                size="md"
+                isActive=${density === "comfortable"}
+                onClick=${() => setDensity("comfortable")}
+              />
+              <${TouchButton}
+                label="Compact"
+                variant="passive"
+                size="md"
+                isActive=${density === "compact"}
+                onClick=${() => setDensity("compact")}
+              />
+            </div>
+          </div>
+        </section>
       </section>
 
-      <section className="metrics-grid">
-        <${MetricTile}
-          label="Active Orders"
-          value=${String(totalOrders)}
-          tone=${queueTone}
-          helper="Across all stations"
-        />
-        <${MetricTile}
-          label="Late Orders"
-          value=${String(lateOrders)}
-          tone=${lateOrders > 0 ? "danger" : "success"}
-          helper="15+ minutes"
-        />
-        <${MetricTile}
-          label="Average Wait"
-          value=${averageWait}
-          tone="default"
-          helper="Placed to now"
-        />
-        <${MetricTile}
-          label="Ready to Serve"
-          value=${String(readyOrders)}
-          tone="success"
-          helper="Hand off now"
-        />
+      <section className="kds-metrics-surface">
+        <header className="kds-metrics-surface__head">
+          <h2>Service metrics</h2>
+          <p>Executive view of queue pressure and handoff readiness</p>
+        </header>
+        <div className="metrics-grid">
+          <${MetricTile}
+            label="Active Orders"
+            value=${String(totalOrders)}
+            tone=${queueTone}
+            helper="Across all stations"
+          />
+          <${MetricTile}
+            label="Late Orders"
+            value=${String(lateOrders)}
+            tone=${lateOrders > 0 ? "danger" : "success"}
+            helper="15+ minutes"
+          />
+          <${MetricTile}
+            label="Average Wait"
+            value=${averageWait}
+            tone="default"
+            helper="Placed to now"
+          />
+          <${MetricTile}
+            label="Ready to Serve"
+            value=${String(readyOrders)}
+            tone="success"
+            helper="Handoff lane"
+          />
+        </div>
       </section>
 
       ${!isSupabaseConfigured
@@ -433,21 +455,30 @@ export function KDSDashboard() {
         ? html`<p className="loading-banner">Loading kitchen orders...</p>`
         : null}
 
-      <section className="kds-board" data-density=${density}>
-        ${BOARD_COLUMNS.map(
-          (column) => html`
-            <${KanbanColumn}
-              key=${column.key}
-              title=${column.title}
-              statusKey=${column.key}
-              orders=${groupedOrders[column.key]}
-              nowMs=${nowMs}
-              onMoveOrder=${handleMoveOrder}
-              updatingOrderIds=${updatingOrderIds}
-              density=${density}
-            />
-          `
-        )}
+      <section className="kds-workflow-surface">
+        <header className="kds-workflow-surface__head">
+          <h2>Workflow board</h2>
+          <p>Follow the production path from intake to final pickup.</p>
+        </header>
+
+        <section className="kds-board" data-density=${density}>
+          ${BOARD_COLUMNS.map(
+            (column) => html`
+              <${KanbanColumn}
+                key=${column.key}
+                title=${column.title}
+                subtitle=${COLUMN_PRESENTATION[column.key].subtitle}
+                sequence=${COLUMN_PRESENTATION[column.key].sequence}
+                statusKey=${column.key}
+                orders=${groupedOrders[column.key]}
+                nowMs=${nowMs}
+                onMoveOrder=${handleMoveOrder}
+                updatingOrderIds=${updatingOrderIds}
+                density=${density}
+              />
+            `
+          )}
+        </section>
       </section>
     </main>
   `;

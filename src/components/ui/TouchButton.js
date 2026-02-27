@@ -26,6 +26,8 @@ export function TouchButton({
     .filter(Boolean)
     .join(" ");
 
+  const ariaPressed = isActive ? true : undefined;
+
   return html`
     <button
       type=${type}
@@ -33,7 +35,7 @@ export function TouchButton({
       onClick=${onClick}
       disabled=${disabled}
       title=${title}
-      aria-pressed=${isActive}
+      aria-pressed=${ariaPressed}
     >
       ${label}
     </button>
