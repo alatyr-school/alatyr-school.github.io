@@ -91,6 +91,10 @@ function formatEventTime(timestampIso) {
   });
 }
 
+function formatSeverity(severity) {
+  return String(severity ?? "").toUpperCase();
+}
+
 export function KDSDashboard() {
   const [nowMs, setNowMs] = useState(Date.now());
   const [searchText, setSearchText] = useState("");
@@ -224,6 +228,9 @@ export function KDSDashboard() {
     : "Demo DB";
   const queueHealthLabel =
     lateOrders > 0 ? `${lateOrders} delayed` : "On cadence";
+  const openDemoAnomalies = demoRuntime.anomalies.filter((entry) =>
+    ["open", "acknowledged"].includes(entry.status)
+  );
 
   return html`
     <main className="kds-dashboard">
@@ -372,8 +379,8 @@ export function KDSDashboard() {
               <header className="kds-demo-surface__head">
                 <h2>Demo backend simulator</h2>
                 <p>
-                  In-memory simulation of Supabase tables, transition rules and
-                  <code>order_events</code> audit stream.
+                  In-memory simulation of Supabase data, command log, technical
+                  events, anomaly detection, incidents and recovery actions.
                 </p>
               </header>
 
@@ -436,6 +443,66 @@ export function KDSDashboard() {
                       onClick=${demoRuntime.touchSession}
                     />
                   </div>
+                  <p className="kds-demo-card__title">Fault injection</p>
+                  <div className="kds-demo-actions">
+                    <${TouchButton}
+                      label="Inject Realtime Drop"
+                      variant="reverse"
+                      size="md"
+                      onClick=${demoRuntime.injectRealtimeDrop}
+                    />
+                    <${TouchButton}
+                      label="Inject Duplicate Order"
+                      variant="reverse"
+                      size="md"
+                      onClick=${demoRuntime.injectDuplicateOrder}
+                    />
+                    <${TouchButton}
+                      label="Inject Status Jump"
+                      variant="reverse"
+                      size="md"
+                      onClick=${demoRuntime.injectStatusJump}
+                    />
+                    <${TouchButton}
+                      label="Inject Screen Divergence"
+                      variant="reverse"
+                      size="md"
+                      onClick=${demoRuntime.injectDivergence}
+                    />
+                    <${TouchButton}
+                      label="Inject Stale Snapshot"
+                      variant="reverse"
+                      size="md"
+                      onClick=${demoRuntime.injectStaleState}
+                    />
+                    <${TouchButton}
+                      label="Inject KPI Drift"
+                      variant="reverse"
+                      size="md"
+                      onClick=${demoRuntime.injectKpiMismatch}
+                    />
+                  </div>
+                  <p className="kds-demo-card__title">Diagnostics & response</p>
+                  <div className="kds-demo-actions">
+                    <${TouchButton}
+                      label="Run Analysis Scan"
+                      variant="forward"
+                      size="md"
+                      onClick=${demoRuntime.runAnalysisScan}
+                    />
+                    <${TouchButton}
+                      label="Create Incident"
+                      variant="secondary"
+                      size="md"
+                      onClick=${demoRuntime.createIncidentFromOpenAnomalies}
+                    />
+                    <${TouchButton}
+                      label="Run Recovery Resync"
+                      variant="confirm"
+                      size="md"
+                      onClick=${demoRuntime.runRecoveryResync}
+                    />
+                  </div>
                 </section>
 
                 <section className="kds-demo-card">
@@ -464,6 +531,110 @@ export function KDSDashboard() {
                       ${formatEventTime(demoRuntime.session.last_seen_at)}
                     </p>
                   </div>
+                </section>
+
+                <section className="kds-demo-card">
+                  <p className="kds-demo-card__title">Reliability analysis</p>
+                  <ul className="kds-demo-table-list">
+                    <li className="kds-demo-table-item">
+                      <code>open_anomalies</code>
+                      <span>${demoRuntime.computedAnalysisSummary.openAnomalies}</span>
+                    </li>
+                    <li className="kds-demo-table-item">
+                      <code>critical_open</code>
+                      <span>${demoRuntime.computedAnalysisSummary.criticalOpen}</span>
+                    </li>
+                    <li className="kds-demo-table-item">
+                      <code>active_incidents</code>
+                      <span>${demoRuntime.computedAnalysisSummary.activeIncidents}</span>
+                    </li>
+                    <li className="kds-demo-table-item">
+                      <code>command_success_rate</code>
+                      <span>${demoRuntime.computedAnalysisSummary.commandSuccessRate}%</span>
+                    </li>
+                  </ul>
+                  <p className="kds-demo-card__title">Last scan</p>
+                  <p className="kds-demo-event__meta">
+                    ${demoRuntime.analysisReport.lastScanAt
+                      ? formatEventTime(demoRuntime.analysisReport.lastScanAt)
+                      : "not started"}
+                    <span>
+                      +${demoRuntime.analysisReport.insertedAnomalies} new anomalies
+                    </span>
+                  </p>
+                  <p className="kds-demo-card__title">Open anomalies</p>
+                  <ul className="kds-demo-events">
+                    ${openDemoAnomalies.slice(0, 8).map(
+                      (anomaly) => html`
+                        <li key=${anomaly.id} className="kds-demo-event">
+                          <div className="kds-demo-event__top">
+                            <span className="kds-demo-event__type"
+                              >${anomaly.anomaly_type}</span
+                            >
+                            <time>${formatSeverity(anomaly.severity)}</time>
+                          </div>
+                          <p className="kds-demo-event__meta">
+                            detector: ${anomaly.detector_name}
+                            <span>${anomaly.status}</span>
+                          </p>
+                        </li>
+                      `
+                    )}
+                  </ul>
+                </section>
+
+                <section className="kds-demo-card">
+                  <p className="kds-demo-card__title">Recent technical events</p>
+                  <ul className="kds-demo-events">
+                    ${demoRuntime.technicalEvents.slice(0, 10).map(
+                      (event) => html`
+                        <li key=${event.id} className="kds-demo-event">
+                          <div className="kds-demo-event__top">
+                            <span className="kds-demo-event__type"
+                              >${event.event_name}</span
+                            >
+                            <time>${formatSeverity(event.severity)}</time>
+                          </div>
+                          <p className="kds-demo-event__meta">
+                            ${event.component}
+                            <span>${formatEventTime(event.created_at)}</span>
+                          </p>
+                          ${event.message
+                            ? html`<p className="kds-demo-event__reason">${event.message}</p>`
+                            : null}
+                        </li>
+                      `
+                    )}
+                  </ul>
+                </section>
+
+                <section className="kds-demo-card">
+                  <p className="kds-demo-card__title">Recent command log</p>
+                  <ul className="kds-demo-events">
+                    ${demoRuntime.commandLogs.slice(0, 10).map(
+                      (entry) => html`
+                        <li key=${entry.id} className="kds-demo-event">
+                          <div className="kds-demo-event__top">
+                            <span className="kds-demo-event__type"
+                              >${entry.command_type}</span
+                            >
+                            <time>${entry.result}</time>
+                          </div>
+                          <p className="kds-demo-event__meta">
+                            ${entry.order_id ? `order: ${entry.order_id}` : "global command"}
+                            <span>${formatEventTime(entry.received_at)}</span>
+                          </p>
+                          ${entry.error_message
+                            ? html`
+                                <p className="kds-demo-event__reason">
+                                  ${entry.error_code}: ${entry.error_message}
+                                </p>
+                              `
+                            : null}
+                        </li>
+                      `
+                    )}
+                  </ul>
                 </section>
 
                 <section className="kds-demo-card">

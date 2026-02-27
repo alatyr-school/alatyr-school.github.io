@@ -30,6 +30,43 @@ export function useKitchenOrders() {
   const [updatingOrderIds, setUpdatingOrderIds] = useState(new Set());
   const channelRef = useRef(null);
 
+  const reportTechnicalEvent = useCallback(
+    async ({
+      severity = "warn",
+      component,
+      eventName,
+      message = null,
+      payload = {},
+      orderId = null,
+      sessionId = null,
+      errorClass = null,
+      errorCode = null,
+    }) => {
+      if (!supabase) {
+        return;
+      }
+
+      try {
+        await supabase.rpc("kds_log_technical_event", {
+          p_severity: severity,
+          p_component: component,
+          p_event_name: eventName,
+          p_message: message,
+          p_payload: payload,
+          p_order_id: orderId,
+          p_session_id: sessionId,
+          p_command_id: null,
+          p_trace_id: null,
+          p_error_class: errorClass,
+          p_error_code: errorCode,
+        });
+      } catch {
+        // Silent fallback: observability call should never block business flow.
+      }
+    },
+    []
+  );
+
   const fetchOrders = useCallback(async () => {
     if (!isSupabaseConfigured || !supabase) {
       setLoading(false);
@@ -63,6 +100,15 @@ export function useKitchenOrders() {
     if (fetchError) {
       setError(fetchError.message);
       setLoading(false);
+      reportTechnicalEvent({
+        severity: "error",
+        component: "client_fetch",
+        eventName: "orders_fetch_failed",
+        message: fetchError.message,
+        payload: { hook: "useKitchenOrders.fetchOrders" },
+        errorClass: "query",
+        errorCode: fetchError.code ?? null,
+      });
       return;
     }
 
@@ -76,7 +122,7 @@ export function useKitchenOrders() {
     setOrders(normalized);
     setError("");
     setLoading(false);
-  }, []);
+  }, [reportTechnicalEvent]);
 
   useEffect(() => {
     fetchOrders();
@@ -102,6 +148,24 @@ export function useKitchenOrders() {
           setConnectionState("live");
         } else if (status === "CHANNEL_ERROR") {
           setConnectionState("error");
+          reportTechnicalEvent({
+            severity: "error",
+            component: "realtime",
+            eventName: "channel_error",
+            message: "Supabase realtime channel error",
+            payload: { channel: "kds-realtime-orders" },
+            errorClass: "realtime",
+          });
+        } else if (status === "TIMED_OUT") {
+          setConnectionState("error");
+          reportTechnicalEvent({
+            severity: "warn",
+            component: "realtime",
+            eventName: "channel_timeout",
+            message: "Supabase realtime channel timeout",
+            payload: { channel: "kds-realtime-orders" },
+            errorClass: "realtime",
+          });
         } else {
           setConnectionState("connecting");
         }
@@ -114,7 +178,7 @@ export function useKitchenOrders() {
         supabase.removeChannel(channelRef.current);
       }
     };
-  }, [fetchOrders]);
+  }, [fetchOrders, reportTechnicalEvent]);
 
   const moveOrder = useCallback(async (orderId, nextStatus) => {
     if (!supabase) {
@@ -175,6 +239,17 @@ export function useKitchenOrders() {
       if (resolvedError) {
         setError(resolvedError.message);
         fetchOrders();
+        reportTechnicalEvent({
+          severity: "error",
+          component: "rpc",
+          eventName: "move_order_failed",
+          message: resolvedError.message,
+          payload: { nextStatus, fallbackUsed: missingFunction },
+          orderId,
+          sessionId: actorSessionId,
+          errorClass: missingFunction ? "fallback" : "rpc",
+          errorCode: resolvedError.code ?? null,
+        });
       } else {
         if (resolvedData?.id) {
           setOrders((current) =>
@@ -199,7 +274,7 @@ export function useKitchenOrders() {
         return next;
       });
     }
-  }, [fetchOrders]);
+  }, [fetchOrders, reportTechnicalEvent]);
 
   return {
     orders,

@@ -10,7 +10,8 @@ Show end-to-end logic to stakeholders without live infrastructure:
 - audit stream generation,
 - table-level data growth,
 - session heartbeat behavior,
-- guard rails for invalid transitions.
+- guard rails for invalid transitions,
+- reliability fault simulation and incident analysis.
 
 ## Where it appears
 
@@ -30,6 +31,13 @@ When `window.__SUPABASE_URL__` / `window.__SUPABASE_ANON_KEY__` are placeholders
 - `staff_profiles`
 - `staff_station_memberships`
 - `order_station_assignments`
+- `kds_command_log`
+- `kds_technical_events`
+- `kds_client_heartbeats`
+- `kds_anomalies`
+- `kds_incidents`
+- `kds_incident_timeline`
+- `kds_recovery_actions`
 
 ## Scenario controls
 
@@ -42,6 +50,21 @@ When `window.__SUPABASE_URL__` / `window.__SUPABASE_ANON_KEY__` are placeholders
 - **Cancel New Order** (with reason code)
 - **Session Heartbeat**
 - **Reset Scenario**
+
+## Fault injection controls
+
+- **Inject Realtime Drop**: creates technical event + realtime gap anomaly.
+- **Inject Duplicate Order**: inserts duplicated active order number anomaly.
+- **Inject Status Jump**: simulates illegal transition (`new -> ready`).
+- **Inject Screen Divergence**: simulates checksum mismatch across screens.
+- **Inject Stale Snapshot**: forces old heartbeat age.
+- **Inject KPI Drift**: simulates analytics mismatch.
+
+## Analysis and response controls
+
+- **Run Analysis Scan**: detector pass over duplicates, stale sessions, checksum divergence.
+- **Create Incident**: creates incident from open anomalies.
+- **Run Recovery Resync**: resolves sync-related anomalies by heartbeat/checksum resync.
 
 ## Transition rules (same as backend model)
 
@@ -60,3 +83,10 @@ Every mutation appends a demo `order_events` entry with:
 - actor/session context,
 - optional reason code,
 - event timestamp.
+
+Additionally, demo runtime writes:
+
+- command-level entries to `kds_command_log`,
+- technical diagnostics to `kds_technical_events`,
+- detector findings to `kds_anomalies`,
+- incident and recovery traces for response workflows.
