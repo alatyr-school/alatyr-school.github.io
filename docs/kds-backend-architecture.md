@@ -75,6 +75,7 @@ Backward compatibility is preserved by sync triggers between:
 - Policies enforce station visibility and update rights.
 - Role functions (`viewer`, `cook`, `expediter`, `manager`, `admin`, `integration`).
 - `order_events` is append-only from server triggers; direct client mutation is revoked.
+- Safe write entrypoints are exposed as RPC functions instead of ad-hoc direct writes.
 
 ## Realtime scope (data layer only)
 
@@ -87,3 +88,16 @@ The following tables are configured for realtime publication:
 - `kitchen_stations`
 
 This schema intentionally stops at data architecture stage (no client subscription code here).
+
+## RPC contract (safe write path)
+
+1. `kds_touch_kitchen_session(...) -> kitchen_sessions`  
+   Creates/refreshes a device session and updates `last_seen_at`.
+
+2. `kds_move_order_status(...) -> orders`  
+   Validates transition + station permissions + optional optimistic lock (`p_expected_updated_at`), then writes status and emits audit events.
+
+3. `kds_update_order_note(...) -> orders`  
+   Controlled update of order note (`special_instructions`) with audit event.
+
+`reason_code` and `actor_session_id` are passed to audit layer using transaction-local settings consumed by `order_events` trigger.

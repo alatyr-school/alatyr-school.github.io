@@ -1,6 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isSupabaseConfigured, supabase } from "../supabaseClient.js";
 
+const KDS_SESSION_STORAGE_KEY = "kds_session_id";
+
+function getOrCreateKdsSessionId() {
+  if (!globalThis.localStorage || !globalThis.crypto?.randomUUID) {
+    return null;
+  }
+
+  try {
+    const existing = globalThis.localStorage.getItem(KDS_SESSION_STORAGE_KEY);
+    if (existing) {
+      return existing;
+    }
+
+    const created = globalThis.crypto.randomUUID();
+    globalThis.localStorage.setItem(KDS_SESSION_STORAGE_KEY, created);
+    return created;
+  } catch {
+    return null;
+  }
+}
+
 export function useKitchenOrders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -100,6 +121,8 @@ export function useKitchenOrders() {
       return;
     }
 
+    let expectedUpdatedAt = null;
+
     setUpdatingOrderIds((current) => {
       const next = new Set(current);
       next.add(orderId);
@@ -109,29 +132,73 @@ export function useKitchenOrders() {
     setOrders((current) =>
       current.map((order) => {
         if (order.id === orderId) {
+          expectedUpdatedAt = order.updated_at ?? null;
           return { ...order, status: nextStatus };
         }
         return order;
       })
     );
 
-    const { error: updateError } = await supabase
-      .from("orders")
-      .update({ status: nextStatus })
-      .eq("id", orderId);
+    try {
+      const actorSessionId = getOrCreateKdsSessionId();
+      const { data: rpcData, error: rpcError } = await supabase.rpc(
+        "kds_move_order_status",
+        {
+          p_order_id: orderId,
+          p_to_status: nextStatus,
+          p_reason_code: null,
+          p_actor_session_id: actorSessionId,
+          p_expected_updated_at: expectedUpdatedAt,
+        }
+      );
 
-    if (updateError) {
-      setError(updateError.message);
-      fetchOrders();
-    } else {
-      setError("");
+      let resolvedData = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+      let resolvedError = rpcError;
+      const message = rpcError?.message ?? "";
+      const missingFunction =
+        message.includes("Could not find the function") ||
+        message.includes("does not exist");
+
+      // Transitional fallback for environments where RPC is not deployed yet.
+      if (missingFunction) {
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from("orders")
+          .update({ status: nextStatus })
+          .eq("id", orderId)
+          .select("id,status,updated_at")
+          .maybeSingle();
+
+        resolvedData = fallbackData ?? resolvedData;
+        resolvedError = fallbackError;
+      }
+
+      if (resolvedError) {
+        setError(resolvedError.message);
+        fetchOrders();
+      } else {
+        if (resolvedData?.id) {
+          setOrders((current) =>
+            current.map((order) =>
+              order.id === resolvedData.id
+                ? {
+                    ...order,
+                    status: resolvedData.status ?? nextStatus,
+                    updated_at: resolvedData.updated_at ?? order.updated_at,
+                  }
+                : order
+            )
+          );
+        }
+
+        setError("");
+      }
+    } finally {
+      setUpdatingOrderIds((current) => {
+        const next = new Set(current);
+        next.delete(orderId);
+        return next;
+      });
     }
-
-    setUpdatingOrderIds((current) => {
-      const next = new Set(current);
-      next.delete(orderId);
-      return next;
-    });
   }, [fetchOrders]);
 
   return {

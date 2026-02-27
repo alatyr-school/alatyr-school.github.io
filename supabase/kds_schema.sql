@@ -615,6 +615,14 @@ begin
 end;
 $$;
 
+create or replace function public.current_reason_code()
+returns text
+language sql
+stable
+as $$
+  select nullif(current_setting('app.kds_reason_code', true), '')
+$$;
+
 create or replace function public.can_view_station(p_station_id uuid)
 returns boolean
 language plpgsql
@@ -742,6 +750,251 @@ end;
 $$;
 
 -------------------------------------------------------------------------------
+-- 6b) RPC / SERVICE FUNCTIONS (SAFE WRITE ENTRYPOINTS)
+-------------------------------------------------------------------------------
+
+create or replace function public.kds_touch_kitchen_session(
+  p_session_id uuid default null,
+  p_device_uid text default null,
+  p_device_label text default null,
+  p_station_id uuid default null,
+  p_app_version text default null,
+  p_metadata jsonb default '{}'::jsonb
+)
+returns public.kitchen_sessions
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_session public.kitchen_sessions%rowtype;
+begin
+  if v_user_id is null and public.current_jwt_role() <> 'service_role' then
+    raise exception 'authentication required';
+  end if;
+
+  if p_station_id is not null then
+    if not exists (
+      select 1
+      from public.kitchen_stations ks
+      where ks.id = p_station_id
+        and ks.is_active = true
+        and ks.archived_at is null
+    ) then
+      raise exception 'invalid or inactive station_id';
+    end if;
+  end if;
+
+  if p_session_id is not null then
+    select *
+    into v_session
+    from public.kitchen_sessions
+    where id = p_session_id
+    limit 1;
+
+    if found then
+      if not (
+        public.is_privileged_role()
+        or v_session.staff_user_id = v_user_id
+        or v_session.staff_user_id is null
+      ) then
+        raise exception 'session does not belong to current user';
+      end if;
+
+      update public.kitchen_sessions
+      set
+        device_uid = coalesce(p_device_uid, v_session.device_uid),
+        device_label = coalesce(p_device_label, v_session.device_label),
+        station_id = coalesce(p_station_id, v_session.station_id),
+        app_version = coalesce(p_app_version, v_session.app_version),
+        metadata = coalesce(p_metadata, v_session.metadata),
+        status = 'active',
+        last_seen_at = timezone('utc', now()),
+        ended_at = null,
+        staff_user_id = coalesce(v_session.staff_user_id, v_user_id)
+      where id = p_session_id
+      returning * into v_session;
+
+      return v_session;
+    end if;
+  end if;
+
+  if p_device_uid is null or btrim(p_device_uid) = '' then
+    raise exception 'device_uid is required when creating a new kitchen session';
+  end if;
+
+  insert into public.kitchen_sessions (
+    device_uid,
+    device_label,
+    station_id,
+    staff_user_id,
+    status,
+    started_at,
+    last_seen_at,
+    app_version,
+    metadata
+  )
+  values (
+    p_device_uid,
+    p_device_label,
+    p_station_id,
+    v_user_id,
+    'active',
+    timezone('utc', now()),
+    timezone('utc', now()),
+    p_app_version,
+    coalesce(p_metadata, '{}'::jsonb)
+  )
+  returning * into v_session;
+
+  return v_session;
+end;
+$$;
+
+create or replace function public.kds_move_order_status(
+  p_order_id uuid,
+  p_to_status public.order_status,
+  p_reason_code text default null,
+  p_actor_session_id uuid default null,
+  p_expected_updated_at timestamptz default null
+)
+returns public.orders
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_current public.orders%rowtype;
+  v_updated public.orders%rowtype;
+begin
+  if auth.uid() is null and public.current_jwt_role() <> 'service_role' then
+    raise exception 'authentication required';
+  end if;
+
+  select *
+  into v_current
+  from public.orders
+  where id = p_order_id
+    and archived_at is null
+  for update;
+
+  if not found then
+    raise exception 'order not found';
+  end if;
+
+  if p_expected_updated_at is not null
+     and v_current.updated_at is distinct from p_expected_updated_at then
+    raise exception 'order was updated by another process';
+  end if;
+
+  if not (
+    public.is_privileged_role()
+    or public.can_update_station_status(v_current.station_id)
+  ) then
+    raise exception 'you are not allowed to update status for this station';
+  end if;
+
+  if not public.is_valid_order_transition(v_current.status, p_to_status) then
+    raise exception 'invalid order status transition: % -> %', v_current.status, p_to_status;
+  end if;
+
+  if p_to_status = 'cancelled'
+     and (p_reason_code is null or btrim(p_reason_code) = '') then
+    raise exception 'reason_code is required for cancelled status';
+  end if;
+
+  if v_current.status = p_to_status then
+    return v_current;
+  end if;
+
+  if p_actor_session_id is not null then
+    perform set_config('app.kds_session_id', p_actor_session_id::text, true);
+  end if;
+
+  if p_reason_code is not null and btrim(p_reason_code) <> '' then
+    perform set_config('app.kds_reason_code', btrim(p_reason_code), true);
+  end if;
+
+  update public.orders
+  set status = p_to_status
+  where id = p_order_id
+  returning * into v_updated;
+
+  return v_updated;
+end;
+$$;
+
+create or replace function public.kds_update_order_note(
+  p_order_id uuid,
+  p_special_instructions text,
+  p_reason_code text default null,
+  p_actor_session_id uuid default null,
+  p_expected_updated_at timestamptz default null
+)
+returns public.orders
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_current public.orders%rowtype;
+  v_updated public.orders%rowtype;
+begin
+  if auth.uid() is null and public.current_jwt_role() <> 'service_role' then
+    raise exception 'authentication required';
+  end if;
+
+  select *
+  into v_current
+  from public.orders
+  where id = p_order_id
+    and archived_at is null
+  for update;
+
+  if not found then
+    raise exception 'order not found';
+  end if;
+
+  if p_expected_updated_at is not null
+     and v_current.updated_at is distinct from p_expected_updated_at then
+    raise exception 'order was updated by another process';
+  end if;
+
+  if not (
+    public.is_privileged_role()
+    or public.can_update_station_status(v_current.station_id)
+  ) then
+    raise exception 'you are not allowed to update note for this station';
+  end if;
+
+  if p_actor_session_id is not null then
+    perform set_config('app.kds_session_id', p_actor_session_id::text, true);
+  end if;
+
+  if p_reason_code is not null and btrim(p_reason_code) <> '' then
+    perform set_config('app.kds_reason_code', btrim(p_reason_code), true);
+  end if;
+
+  update public.orders
+  set special_instructions = p_special_instructions
+  where id = p_order_id
+  returning * into v_updated;
+
+  return v_updated;
+end;
+$$;
+
+revoke all on function public.kds_touch_kitchen_session(uuid, text, text, uuid, text, jsonb) from public;
+grant execute on function public.kds_touch_kitchen_session(uuid, text, text, uuid, text, jsonb) to authenticated, service_role;
+
+revoke all on function public.kds_move_order_status(uuid, public.order_status, text, uuid, timestamptz) from public;
+grant execute on function public.kds_move_order_status(uuid, public.order_status, text, uuid, timestamptz) to authenticated, service_role;
+
+revoke all on function public.kds_update_order_note(uuid, text, text, uuid, timestamptz) from public;
+grant execute on function public.kds_update_order_note(uuid, text, text, uuid, timestamptz) to authenticated, service_role;
+
+-------------------------------------------------------------------------------
 -- 7) BUSINESS RULE TRIGGERS
 -------------------------------------------------------------------------------
 
@@ -860,6 +1113,7 @@ declare
   v_actor_user_id uuid := auth.uid();
   v_actor_session_id uuid := public.current_kds_session_id();
   v_actor_type text := public.current_actor_type();
+  v_reason_code text := public.current_reason_code();
 begin
   if tg_op = 'INSERT' then
     insert into public.order_events (
@@ -870,6 +1124,7 @@ begin
       actor_user_id,
       actor_session_id,
       actor_type,
+      reason_code,
       payload
     )
     values (
@@ -880,6 +1135,7 @@ begin
       v_actor_user_id,
       v_actor_session_id,
       v_actor_type,
+      v_reason_code,
       jsonb_build_object(
         'source', new.source,
         'priority', new.priority
@@ -899,6 +1155,7 @@ begin
       actor_user_id,
       actor_session_id,
       actor_type,
+      reason_code,
       payload
     )
     values (
@@ -910,6 +1167,7 @@ begin
       v_actor_user_id,
       v_actor_session_id,
       v_actor_type,
+      v_reason_code,
       jsonb_build_object(
         'priority', new.priority,
         'source', new.source
@@ -925,6 +1183,7 @@ begin
       actor_user_id,
       actor_session_id,
       actor_type,
+      reason_code,
       payload
     )
     values (
@@ -934,6 +1193,7 @@ begin
       v_actor_user_id,
       v_actor_session_id,
       v_actor_type,
+      v_reason_code,
       jsonb_build_object(
         'from_station_id', old.station_id,
         'to_station_id', new.station_id
@@ -949,6 +1209,7 @@ begin
       actor_user_id,
       actor_session_id,
       actor_type,
+      reason_code,
       payload
     )
     values (
@@ -958,6 +1219,7 @@ begin
       v_actor_user_id,
       v_actor_session_id,
       v_actor_type,
+      v_reason_code,
       jsonb_build_object(
         'old_note', old.special_instructions,
         'new_note', new.special_instructions
@@ -1213,7 +1475,7 @@ create policy "orders_update"
   for update
   to authenticated
   using (public.can_view_station(station_id))
-  with check (public.can_view_station(station_id));
+  with check (public.can_update_station_status(station_id) or public.is_privileged_role());
 
 drop policy if exists "orders_delete" on public.orders;
 create policy "orders_delete"
