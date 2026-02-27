@@ -1,9 +1,9 @@
 import React from "react";
 import htm from "htm";
+import { FIFTEEN_MINUTES_MS, getElapsedMs } from "../constants/kds.js";
+import { TouchButton } from "./ui/TouchButton.js";
 
 const html = htm.bind(React.createElement);
-
-const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 
 const statusActions = {
   new: [{ label: "Start Prep", nextStatus: "prep", tone: "primary" }],
@@ -33,20 +33,37 @@ function formatDuration(elapsedMs) {
   )}`;
 }
 
-export function OrderCard({ order, nowMs, onMoveOrder, isUpdating }) {
-  const placedAtMs = new Date(order.placed_at).getTime();
-  const elapsedMs = nowMs - placedAtMs;
+export function OrderCard({
+  order,
+  nowMs,
+  onMoveOrder,
+  isUpdating,
+  density = "comfortable",
+}) {
+  const elapsedMs = getElapsedMs(order.placed_at, nowMs);
   const isLate = elapsedMs >= FIFTEEN_MINUTES_MS;
   const actions = statusActions[order.status] ?? [];
   const items = order.order_items ?? [];
 
   return html`
-    <article className=${`order-card ${isLate ? "order-card--late" : ""}`}>
+    <article
+      className=${`order-card order-card--${density} ${
+        isLate ? "order-card--late" : ""
+      }`}
+    >
       <header className="order-card__header">
-        <h3 className="order-card__title">Order #${order.order_number}</h3>
-        <span className=${`timer-pill ${isLate ? "timer-pill--late" : ""}`}>
-          ${formatDuration(elapsedMs)}
-        </span>
+        <div>
+          <h3 className="order-card__title">Order #${order.order_number}</h3>
+          <p className="order-card__meta">${items.length} items</p>
+        </div>
+        <div className="order-card__timer-group">
+          <span className=${`timer-pill ${isLate ? "timer-pill--late" : ""}`}>
+            ${formatDuration(elapsedMs)}
+          </span>
+          <span className=${`urgency-pill ${isLate ? "urgency-pill--late" : ""}`}>
+            ${isLate ? "Late" : "On time"}
+          </span>
+        </div>
       </header>
 
       <ul className="order-items">
@@ -78,14 +95,15 @@ export function OrderCard({ order, nowMs, onMoveOrder, isUpdating }) {
       <div className="order-card__actions">
         ${actions.map(
           (action) => html`
-            <button
+            <${TouchButton}
               key=${`${order.id}-${action.nextStatus}`}
-              className=${`touch-btn touch-btn--${action.tone}`}
+              label=${action.label}
+              variant=${action.tone}
+              size=${density === "compact" ? "md" : "lg"}
+              block=${true}
               onClick=${() => onMoveOrder(order.id, action.nextStatus)}
               disabled=${isUpdating}
-            >
-              ${action.label}
-            </button>
+            />
           `
         )}
       </div>

@@ -1,6 +1,7 @@
 import React from "react";
 import htm from "htm";
 import { OrderCard } from "./OrderCard.js";
+import { isOrderLate } from "../constants/kds.js";
 
 const html = htm.bind(React.createElement);
 
@@ -11,11 +12,19 @@ export function KanbanColumn({
   nowMs,
   onMoveOrder,
   updatingOrderIds,
+  density,
 }) {
+  const lateCount = orders.filter((order) => isOrderLate(order, nowMs)).length;
+
   return html`
     <section className=${`kds-column kds-column--${statusKey}`}>
       <header className="kds-column__header">
-        <h2>${title}</h2>
+        <div className="kds-column__title-wrap">
+          <h2>${title}</h2>
+          ${lateCount > 0
+            ? html`<span className="kds-column__late-chip">Late ${lateCount}</span>`
+            : null}
+        </div>
         <span className="kds-column__count">${orders.length}</span>
       </header>
 
@@ -30,6 +39,7 @@ export function KanbanColumn({
                   nowMs=${nowMs}
                   onMoveOrder=${onMoveOrder}
                   isUpdating=${updatingOrderIds.has(order.id)}
+                  density=${density}
                 />
               `
             )}
