@@ -1,54 +1,30 @@
 <!DOCTYPE html>
-<html lang="uk">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vibe Coder Learning Environment</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.cdnfonts.com/css/e-ukraine" rel="stylesheet">
-    <style>
-      body {
-        background-color: #FFFFFF;
-        color: #111111;
-        font-family: 'e-Ukraine', sans-serif;
-      }
-      
-      /* Custom typography utilities if needed */
-      .font-ukraine-head {
-        font-family: 'e-Ukraine Head', 'e-Ukraine', sans-serif;
-      }
-      
-      /* Modern sleek scrollbar */
-      ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-      }
-      ::-webkit-scrollbar-track {
-        background: transparent;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #E5E5E5;
-        border-radius: 10px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #D4D4D4;
-      }
-    </style>
+    <title>Kitchen Display System</title>
+    <link rel="stylesheet" href="/index.css" />
 
-<link rel="stylesheet" href="/index.css">
-  <script type="importmap">
-{
-  "imports": {
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react": "https://esm.sh/react@^19.2.4",
-    "lucide-react": "https://esm.sh/lucide-react@^0.564.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/"
-  }
-}
-</script>
-  <script type="module" crossorigin src="/assets/index-Ci5DlpID.js"></script>
-</head>
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "https://esm.sh/react@19.2.0",
+          "react-dom/client": "https://esm.sh/react-dom@19.2.0/client",
+          "htm": "https://esm.sh/htm@3.1.1",
+          "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.57.4"
+        }
+      }
+    </script>
+
+    <script>
+      window.__SUPABASE_URL__ = window.__SUPABASE_URL__ || "YOUR_SUPABASE_URL";
+      window.__SUPABASE_ANON_KEY__ =
+        window.__SUPABASE_ANON_KEY__ || "YOUR_SUPABASE_ANON_KEY";
+    </script>
+  </head>
   <body>
     <div id="root"></div>
-</body>
+    <script type="module" src="/src/main.js"></script>
+  </body>
 </html>
