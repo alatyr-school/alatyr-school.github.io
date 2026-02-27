@@ -47,3 +47,5 @@ Each injection generates correlated entries in:
 - technical events,
 - anomalies,
 - optional incident/recovery records.
+
+In UI (demo mode), this is exposed via a dedicated **Error simulation lab** panel separated from regular demo order flow controls.

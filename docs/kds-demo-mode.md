@@ -19,6 +19,7 @@ When `window.__SUPABASE_URL__` / `window.__SUPABASE_ANON_KEY__` are placeholders
 
 - Dashboard connection badge shows `Demo DB`.
 - `Demo backend simulator` panel appears above workflow board.
+- `Error simulation lab` appears as a separate panel for fault/incident drills.
 
 ## Simulated tables
 
@@ -59,6 +60,9 @@ When `window.__SUPABASE_URL__` / `window.__SUPABASE_ANON_KEY__` are placeholders
 - **Inject Screen Divergence**: simulates checksum mismatch across screens.
 - **Inject Stale Snapshot**: forces old heartbeat age.
 - **Inject KPI Drift**: simulates analytics mismatch.
+- **Delivery Failure Drill**: bundle scenario (realtime drop + stale snapshot + analysis scan).
+- **Data Integrity Drill**: bundle scenario (duplicate + divergence + KPI drift + scan).
+- **Workflow Desync Drill**: bundle scenario (status jump + divergence + scan).
 
 ## Analysis and response controls
 

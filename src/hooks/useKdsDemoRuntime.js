@@ -1190,6 +1190,31 @@ export function useKdsDemoRuntime({ enabled }) {
     setError("");
   }, [anomalies, appendAnomaly, commandLogs, heartbeats, incidents, technicalEvents]);
 
+  const runDeliveryFailureScenario = useCallback(() => {
+    injectRealtimeDrop();
+    injectStaleState();
+    globalThis.setTimeout(() => {
+      runAnalysisScan();
+    }, 60);
+  }, [injectRealtimeDrop, injectStaleState, runAnalysisScan]);
+
+  const runDataIntegrityScenario = useCallback(() => {
+    injectDuplicateOrder();
+    injectDivergence();
+    injectKpiMismatch();
+    globalThis.setTimeout(() => {
+      runAnalysisScan();
+    }, 60);
+  }, [injectDivergence, injectDuplicateOrder, injectKpiMismatch, runAnalysisScan]);
+
+  const runWorkflowDesyncScenario = useCallback(() => {
+    injectStatusJump();
+    injectDivergence();
+    globalThis.setTimeout(() => {
+      runAnalysisScan();
+    }, 60);
+  }, [injectDivergence, injectStatusJump, runAnalysisScan]);
+
   const createIncidentFromOpenAnomalies = useCallback(() => {
     const openAnomalies = anomalies.filter((entry) =>
       ["open", "acknowledged"].includes(entry.status)
@@ -1434,6 +1459,9 @@ export function useKdsDemoRuntime({ enabled }) {
     injectDivergence,
     injectStaleState,
     injectKpiMismatch,
+    runDeliveryFailureScenario,
+    runDataIntegrityScenario,
+    runWorkflowDesyncScenario,
     createIncidentFromOpenAnomalies,
     runRecoveryResync,
   };
