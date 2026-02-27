@@ -100,8 +100,6 @@ export function useKitchenOrders() {
       return;
     }
 
-    let previousStatus = null;
-
     setUpdatingOrderIds((current) => {
       const next = new Set(current);
       next.add(orderId);
@@ -111,7 +109,6 @@ export function useKitchenOrders() {
     setOrders((current) =>
       current.map((order) => {
         if (order.id === orderId) {
-          previousStatus = order.status;
           return { ...order, status: nextStatus };
         }
         return order;
@@ -125,14 +122,7 @@ export function useKitchenOrders() {
 
     if (updateError) {
       setError(updateError.message);
-
-      if (previousStatus) {
-        setOrders((current) =>
-          current.map((order) =>
-            order.id === orderId ? { ...order, status: previousStatus } : order
-          )
-        );
-      }
+      fetchOrders();
     } else {
       setError("");
     }
@@ -142,7 +132,7 @@ export function useKitchenOrders() {
       next.delete(orderId);
       return next;
     });
-  }, []);
+  }, [fetchOrders]);
 
   return {
     orders,
