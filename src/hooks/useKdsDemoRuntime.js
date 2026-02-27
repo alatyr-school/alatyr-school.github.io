@@ -45,9 +45,54 @@ const DEMO_MENU = [
 ];
 
 const ANALYSIS_SCAN_NAME = "demo_runtime_scan";
+const RECOVERY_STEP_PENDING = "pending";
+const RECOVERY_STEP_IN_PROGRESS = "in_progress";
+const RECOVERY_STEP_COMPLETED = "completed";
+const RECOVERY_STEP_WARNING = "warning";
+const RECOVERY_STEP_FAILED = "failed";
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    globalThis.setTimeout(resolve, ms);
+  });
+}
+
+function createRecoveryGuide(scenarioName) {
+  return {
+    id: createId("demo-recovery-guide"),
+    scenario: scenarioName,
+    created_at: nowIso(),
+    steps: [
+      {
+        id: "detect",
+        title: "1) Detect: run consistency scan",
+        status: RECOVERY_STEP_PENDING,
+        detail: "Pending",
+      },
+      {
+        id: "incident",
+        title: "2) Contain: create incident from anomalies",
+        status: RECOVERY_STEP_PENDING,
+        detail: "Pending",
+      },
+      {
+        id: "recover",
+        title: "3) Recover: execute resync action",
+        status: RECOVERY_STEP_PENDING,
+        detail: "Pending",
+      },
+      {
+        id: "verify",
+        title: "4) Verify: re-run scan and validate board",
+        status: RECOVERY_STEP_PENDING,
+        detail: "Pending",
+      },
+    ],
+  };
 }
 
 function createId(prefix) {
@@ -425,6 +470,8 @@ export function useKdsDemoRuntime({ enabled }) {
       totalTechnicalEvents: 0,
     },
   }));
+  const [recoveryGuide, setRecoveryGuide] = useState(null);
+  const [recoveryExecuting, setRecoveryExecuting] = useState(false);
   const [error, setError] = useState("");
   const [autoplayEnabled, setAutoplayEnabled] = useState(false);
 
@@ -438,6 +485,9 @@ export function useKdsDemoRuntime({ enabled }) {
   const incidentSequenceRef = useRef(1);
   const timelineSequenceRef = useRef(1);
   const recoverySequenceRef = useRef(1);
+  const autoInjectedRef = useRef(false);
+  const anomaliesRef = useRef(anomalies);
+  const incidentsRef = useRef(incidents);
 
   useEffect(() => {
     ordersRef.current = orders;
@@ -446,6 +496,14 @@ export function useKdsDemoRuntime({ enabled }) {
   useEffect(() => {
     eventsRef.current = events;
   }, [events]);
+
+  useEffect(() => {
+    anomaliesRef.current = anomalies;
+  }, [anomalies]);
+
+  useEffect(() => {
+    incidentsRef.current = incidents;
+  }, [incidents]);
 
   const appendCommandLog = useCallback((entry) => {
     const nextEntry = {
@@ -613,6 +671,9 @@ export function useKdsDemoRuntime({ enabled }) {
         totalTechnicalEvents: 0,
       },
     });
+    setRecoveryGuide(null);
+    setRecoveryExecuting(false);
+    autoInjectedRef.current = false;
     setError("");
   }, []);
 
@@ -1190,6 +1251,35 @@ export function useKdsDemoRuntime({ enabled }) {
     setError("");
   }, [anomalies, appendAnomaly, commandLogs, heartbeats, incidents, technicalEvents]);
 
+  const updateRecoveryStep = useCallback((stepId, status, detail) => {
+    setRecoveryGuide((current) => {
+      if (!current) {
+        return current;
+      }
+      return {
+        ...current,
+        steps: current.steps.map((step) =>
+          step.id === stepId
+            ? {
+                ...step,
+                status,
+                detail,
+              }
+            : step
+        ),
+      };
+    });
+  }, []);
+
+  const injectErrorNow = useCallback(() => {
+    injectStatusJump();
+    injectDivergence();
+    injectRealtimeDrop();
+    setRecoveryGuide(createRecoveryGuide("Critical desync drill"));
+    setRecoveryExecuting(false);
+    setError("Error injected: status jump + divergence + realtime gap.");
+  }, [injectDivergence, injectRealtimeDrop, injectStatusJump]);
+
   const runDeliveryFailureScenario = useCallback(() => {
     injectRealtimeDrop();
     injectStaleState();
@@ -1303,6 +1393,99 @@ export function useKdsDemoRuntime({ enabled }) {
     setError("");
   }, [appendRecoveryAction, appendTechnicalEvent, patchRecoveryAction, session.id, session.staff_user_id]);
 
+  const executeRecoveryPath = useCallback(async () => {
+    if (!recoveryGuide || recoveryExecuting) {
+      return;
+    }
+
+    setRecoveryExecuting(true);
+    try {
+      updateRecoveryStep("detect", RECOVERY_STEP_IN_PROGRESS, "Running consistency scan");
+      runAnalysisScan();
+      await sleep(90);
+      const openAfterDetect = anomaliesRef.current.filter((entry) =>
+        ["open", "acknowledged"].includes(entry.status)
+      ).length;
+      updateRecoveryStep(
+        "detect",
+        RECOVERY_STEP_COMPLETED,
+        `Open anomalies detected: ${openAfterDetect}`
+      );
+
+      updateRecoveryStep(
+        "incident",
+        RECOVERY_STEP_IN_PROGRESS,
+        "Creating incident from open anomalies"
+      );
+      createIncidentFromOpenAnomalies();
+      await sleep(90);
+      const activeIncidentCount = incidentsRef.current.filter(
+        (incident) => incident.status !== "resolved"
+      ).length;
+      updateRecoveryStep(
+        "incident",
+        RECOVERY_STEP_COMPLETED,
+        `Active incidents: ${activeIncidentCount}`
+      );
+
+      updateRecoveryStep(
+        "recover",
+        RECOVERY_STEP_IN_PROGRESS,
+        "Executing resync recovery action"
+      );
+      runRecoveryResync();
+      await sleep(90);
+      updateRecoveryStep(
+        "recover",
+        RECOVERY_STEP_COMPLETED,
+        "Recovery resync completed"
+      );
+
+      updateRecoveryStep(
+        "verify",
+        RECOVERY_STEP_IN_PROGRESS,
+        "Re-running scan for post-recovery verification"
+      );
+      runAnalysisScan();
+      await sleep(90);
+      const remainingAnomalies = anomaliesRef.current.filter((entry) =>
+        ["open", "acknowledged"].includes(entry.status)
+      ).length;
+      updateRecoveryStep(
+        "verify",
+        remainingAnomalies === 0 ? RECOVERY_STEP_COMPLETED : RECOVERY_STEP_WARNING,
+        remainingAnomalies === 0
+          ? "Verification successful: no open anomalies"
+          : `Verification warning: ${remainingAnomalies} anomalies still open`
+      );
+      setError("");
+    } catch (runtimeError) {
+      updateRecoveryStep(
+        "verify",
+        RECOVERY_STEP_FAILED,
+        `Recovery flow failed: ${String(runtimeError?.message ?? runtimeError)}`
+      );
+      setError("Recovery path failed in demo runtime.");
+    } finally {
+      setRecoveryExecuting(false);
+    }
+  }, [
+    createIncidentFromOpenAnomalies,
+    recoveryExecuting,
+    recoveryGuide,
+    runAnalysisScan,
+    runRecoveryResync,
+    updateRecoveryStep,
+  ]);
+
+  useEffect(() => {
+    if (!enabled || autoInjectedRef.current || orders.length === 0) {
+      return;
+    }
+    autoInjectedRef.current = true;
+    injectErrorNow();
+  }, [enabled, injectErrorNow, orders.length]);
+
   const resetDemo = useCallback(() => {
     const seededOrders = createSeedOrders();
     const seededSession = createBaseSession();
@@ -1364,6 +1547,8 @@ export function useKdsDemoRuntime({ enabled }) {
         totalTechnicalEvents: 0,
       },
     });
+    setRecoveryGuide(null);
+    setRecoveryExecuting(false);
     setError("");
   }, []);
 
@@ -1443,6 +1628,10 @@ export function useKdsDemoRuntime({ enabled }) {
     setAutoplayEnabled,
     analysisReport,
     computedAnalysisSummary,
+    recoveryGuide,
+    recoveryExecuting,
+    injectErrorNow,
+    executeRecoveryPath,
     runAnalysisScan,
     resetDemo,
     moveOrder,

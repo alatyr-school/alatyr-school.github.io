@@ -1012,6 +1012,109 @@ body {
   font-size: var(--type-12);
 }
 
+.kds-recovery-guide {
+  border: 1px solid rgba(114, 88, 88, 0.42);
+  border-radius: var(--radius-xs);
+  background: rgba(38, 27, 32, 0.44);
+  padding: 0.5rem 0.58rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.kds-recovery-guide__meta {
+  margin: 0;
+  color: #e2c4c4;
+  font-size: var(--type-13);
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.kds-recovery-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.kds-recovery-step {
+  border: 1px solid rgba(113, 95, 95, 0.46);
+  border-radius: 0.46rem;
+  background: rgba(40, 31, 36, 0.5);
+  padding: 0.42rem 0.5rem;
+  display: grid;
+  gap: 0.22rem;
+}
+
+.kds-recovery-step__head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.kds-recovery-step__head strong {
+  font-size: var(--type-12);
+  color: #e5d4d4;
+  letter-spacing: 0.01em;
+}
+
+.kds-recovery-step__head span {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: var(--type-12);
+  color: #d8c1c1;
+}
+
+.kds-recovery-step p {
+  margin: 0;
+  color: #ccb6b6;
+  font-size: var(--type-12);
+}
+
+.kds-recovery-step--in-progress {
+  border-color: rgba(189, 157, 95, 0.68);
+  background: rgba(91, 67, 35, 0.34);
+}
+
+.kds-recovery-step--in-progress .kds-recovery-step__head span {
+  color: #e1c895;
+}
+
+.kds-recovery-step--completed {
+  border-color: rgba(93, 148, 124, 0.68);
+  background: rgba(56, 90, 75, 0.32);
+}
+
+.kds-recovery-step--completed .kds-recovery-step__head span {
+  color: #b9e2cf;
+}
+
+.kds-recovery-step--warning {
+  border-color: rgba(183, 143, 93, 0.68);
+  background: rgba(89, 66, 39, 0.32);
+}
+
+.kds-recovery-step--warning .kds-recovery-step__head span {
+  color: #e5cd9b;
+}
+
+.kds-recovery-step--failed {
+  border-color: rgba(176, 99, 99, 0.75);
+  background: rgba(99, 48, 48, 0.36);
+}
+
+.kds-recovery-step--failed .kds-recovery-step__head span {
+  color: #eab7b7;
+}
+
+.kds-recovery-empty {
+  margin: 0;
+  color: #cdb4b4;
+  font-size: var(--type-13);
+}
+
 @media (max-width: 1600px) {
   .kds-control-architecture {
     grid-template-columns: repeat(2, minmax(0, 1fr));

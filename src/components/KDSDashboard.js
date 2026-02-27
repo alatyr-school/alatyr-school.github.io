@@ -95,6 +95,14 @@ function formatSeverity(severity) {
   return String(severity ?? "").toUpperCase();
 }
 
+function recoveryStepClass(status) {
+  if (status === "in_progress") return "kds-recovery-step kds-recovery-step--in-progress";
+  if (status === "completed") return "kds-recovery-step kds-recovery-step--completed";
+  if (status === "warning") return "kds-recovery-step kds-recovery-step--warning";
+  if (status === "failed") return "kds-recovery-step kds-recovery-step--failed";
+  return "kds-recovery-step";
+}
+
 export function KDSDashboard() {
   const [nowMs, setNowMs] = useState(Date.now());
   const [searchText, setSearchText] = useState("");
@@ -583,6 +591,21 @@ export function KDSDashboard() {
                   <p className="kds-demo-card__title">Diagnostics & response</p>
                   <div className="kds-demo-actions">
                     <${TouchButton}
+                      label="Зроби помилку зараз"
+                      variant="reverse"
+                      size="md"
+                      onClick=${demoRuntime.injectErrorNow}
+                    />
+                    <${TouchButton}
+                      label=${demoRuntime.recoveryExecuting
+                        ? "Виконуємо шлях виправлення..."
+                        : "Показати шлях виправлення"}
+                      variant="confirm"
+                      size="md"
+                      disabled=${!demoRuntime.recoveryGuide || demoRuntime.recoveryExecuting}
+                      onClick=${demoRuntime.executeRecoveryPath}
+                    />
+                    <${TouchButton}
                       label="Run Analysis Scan"
                       variant="forward"
                       size="md"
@@ -601,6 +624,35 @@ export function KDSDashboard() {
                       onClick=${demoRuntime.runRecoveryResync}
                     />
                   </div>
+
+                  <p className="kds-demo-card__title">Recovery playbook</p>
+                  ${demoRuntime.recoveryGuide
+                    ? html`
+                        <div className="kds-recovery-guide">
+                          <p className="kds-recovery-guide__meta">
+                            ${demoRuntime.recoveryGuide.scenario}
+                            <span>${formatEventTime(demoRuntime.recoveryGuide.created_at)}</span>
+                          </p>
+                          <ul className="kds-recovery-steps">
+                            ${demoRuntime.recoveryGuide.steps.map(
+                              (step) => html`
+                                <li key=${step.id} className=${recoveryStepClass(step.status)}>
+                                  <div className="kds-recovery-step__head">
+                                    <strong>${step.title}</strong>
+                                    <span>${step.status}</span>
+                                  </div>
+                                  <p>${step.detail}</p>
+                                </li>
+                              `
+                            )}
+                          </ul>
+                        </div>
+                      `
+                    : html`
+                        <p className="kds-recovery-empty">
+                          Натисни "Зроби помилку зараз", щоб сформувати шлях виправлення.
+                        </p>
+                      `}
 
                   <ul className="kds-demo-table-list">
                     <li className="kds-demo-table-item">

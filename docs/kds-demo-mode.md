@@ -66,6 +66,8 @@ When `window.__SUPABASE_URL__` / `window.__SUPABASE_ANON_KEY__` are placeholders
 
 ## Analysis and response controls
 
+- **Зроби помилку зараз**: instant critical desync injection for live demonstration.
+- **Показати шлях виправлення**: executes a 4-step recovery playbook (detect -> incident -> recover -> verify).
 - **Run Analysis Scan**: detector pass over duplicates, stale sessions, checksum divergence.
 - **Create Incident**: creates incident from open anomalies.
 - **Run Recovery Resync**: resolves sync-related anomalies by heartbeat/checksum resync.

@@ -49,3 +49,4 @@ Each injection generates correlated entries in:
 - optional incident/recovery records.
 
 In UI (demo mode), this is exposed via a dedicated **Error simulation lab** panel separated from regular demo order flow controls.
+It now also includes an instant error trigger and a guided 4-step recovery playbook execution.
