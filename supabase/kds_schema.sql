@@ -116,6 +116,71 @@ begin
   end if;
 end $$;
 
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where t.typname = 'kds_severity'
+      and n.nspname = 'public'
+  ) then
+    create type public.kds_severity as enum ('info', 'warn', 'error', 'critical');
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where t.typname = 'kds_anomaly_status'
+      and n.nspname = 'public'
+  ) then
+    create type public.kds_anomaly_status as enum ('open', 'acknowledged', 'resolved', 'false_positive');
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where t.typname = 'kds_incident_status'
+      and n.nspname = 'public'
+  ) then
+    create type public.kds_incident_status as enum ('open', 'investigating', 'mitigated', 'resolved', 'postmortem');
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where t.typname = 'kds_recovery_status'
+      and n.nspname = 'public'
+  ) then
+    create type public.kds_recovery_status as enum ('pending', 'running', 'success', 'failed');
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where t.typname = 'kds_command_result'
+      and n.nspname = 'public'
+  ) then
+    create type public.kds_command_result as enum ('accepted', 'rejected', 'failed', 'duplicate', 'noop');
+  end if;
+end $$;
+
 -------------------------------------------------------------------------------
 -- 2) CORE CONFIG TABLES
 -------------------------------------------------------------------------------
@@ -197,6 +262,8 @@ create table if not exists public.orders (
   served_at timestamptz,
   cancelled_at timestamptz,
   special_instructions text,
+  state_version bigint not null default 1,
+  last_command_id uuid,
   created_by uuid references public.staff_profiles(user_id),
   updated_by uuid references public.staff_profiles(user_id),
   created_at timestamptz not null default timezone('utc', now()),
@@ -214,6 +281,8 @@ alter table public.orders add column if not exists served_at timestamptz;
 alter table public.orders add column if not exists cancelled_at timestamptz;
 alter table public.orders add column if not exists station_id uuid;
 alter table public.orders add column if not exists special_instructions text;
+alter table public.orders add column if not exists state_version bigint not null default 1;
+alter table public.orders add column if not exists last_command_id uuid;
 alter table public.orders add column if not exists created_by uuid;
 alter table public.orders add column if not exists updated_by uuid;
 alter table public.orders add column if not exists created_at timestamptz not null default timezone('utc', now());
@@ -450,9 +519,18 @@ create table if not exists public.order_events (
   actor_session_id uuid references public.kitchen_sessions(id) on delete set null,
   actor_type text not null default 'user',
   reason_code text,
+  command_id uuid,
+  trace_id uuid,
+  version_after bigint not null default 1,
+  event_origin text not null default 'trigger',
   payload jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default timezone('utc', now())
 );
+
+alter table public.order_events add column if not exists command_id uuid;
+alter table public.order_events add column if not exists trace_id uuid;
+alter table public.order_events add column if not exists version_after bigint not null default 1;
+alter table public.order_events add column if not exists event_origin text not null default 'trigger';
 
 do $$
 begin
@@ -466,7 +544,191 @@ begin
       add constraint order_events_actor_type_check
       check (actor_type in ('user', 'system', 'api', 'device'));
   end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'order_events_event_origin_check'
+      and conrelid = 'public.order_events'::regclass
+  ) then
+    alter table public.order_events
+      add constraint order_events_event_origin_check
+      check (event_origin in ('rpc', 'trigger', 'system', 'recovery'));
+  end if;
 end $$;
+
+with ranked as (
+  select
+    id,
+    row_number() over (partition by order_id order by created_at, id) as rn
+  from public.order_events
+)
+update public.order_events oe
+set version_after = ranked.rn
+from ranked
+where oe.id = ranked.id
+  and (oe.version_after is null or oe.version_after <> ranked.rn);
+
+do $$
+begin
+  if exists (
+    select 1
+    from pg_constraint
+    where conname = 'order_events_order_id_version_after_key'
+      and conrelid = 'public.order_events'::regclass
+  ) then
+    alter table public.order_events
+      drop constraint order_events_order_id_version_after_key;
+  end if;
+end $$;
+
+-------------------------------------------------------------------------------
+-- 4b) OBSERVABILITY, INCIDENTS, RECOVERY
+-------------------------------------------------------------------------------
+
+create table if not exists public.kds_command_log (
+  id uuid primary key default gen_random_uuid(),
+  trace_id uuid not null,
+  order_id uuid references public.orders(id) on delete set null,
+  command_type text not null,
+  requested_to_status public.order_status,
+  expected_version bigint,
+  actor_user_id uuid references public.staff_profiles(user_id) on delete set null,
+  actor_session_id uuid references public.kitchen_sessions(id) on delete set null,
+  received_at timestamptz not null default timezone('utc', now()),
+  started_at timestamptz,
+  finished_at timestamptz,
+  result public.kds_command_result not null default 'accepted',
+  error_class text,
+  error_code text,
+  error_message text,
+  error_context jsonb not null default '{}'::jsonb,
+  latency_ms integer,
+  retry_count integer not null default 0
+);
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'orders_last_command_id_fkey'
+      and conrelid = 'public.orders'::regclass
+  ) then
+    alter table public.orders
+      add constraint orders_last_command_id_fkey
+      foreign key (last_command_id) references public.kds_command_log(id) on delete set null;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'order_events_command_id_fkey'
+      and conrelid = 'public.order_events'::regclass
+  ) then
+    alter table public.order_events
+      add constraint order_events_command_id_fkey
+      foreign key (command_id) references public.kds_command_log(id) on delete set null;
+  end if;
+end $$;
+
+create table if not exists public.kds_technical_events (
+  id bigint generated always as identity primary key,
+  severity public.kds_severity not null default 'info',
+  component text not null,
+  event_name text not null,
+  trace_id uuid,
+  command_id uuid references public.kds_command_log(id) on delete set null,
+  order_id uuid references public.orders(id) on delete set null,
+  session_id uuid references public.kitchen_sessions(id) on delete set null,
+  actor_user_id uuid references public.staff_profiles(user_id) on delete set null,
+  error_class text,
+  error_code text,
+  message text,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.kds_client_heartbeats (
+  session_id uuid primary key references public.kitchen_sessions(id) on delete cascade,
+  station_id uuid not null references public.kitchen_stations(id) on delete cascade,
+  screen_name text,
+  build_version text,
+  connection_state text not null default 'connecting',
+  last_seen_at timestamptz not null default timezone('utc', now()),
+  last_realtime_event_at timestamptz,
+  last_full_sync_at timestamptz,
+  max_order_version_seen bigint not null default 0,
+  board_checksum text,
+  active_counts jsonb not null default '{}'::jsonb,
+  client_time timestamptz,
+  clock_skew_ms integer,
+  last_error_code text,
+  details jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.kds_incidents (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  severity public.kds_severity not null default 'warn',
+  status public.kds_incident_status not null default 'open',
+  detected_at timestamptz not null default timezone('utc', now()),
+  acknowledged_at timestamptz,
+  resolved_at timestamptz,
+  owner_user_id uuid references public.staff_profiles(user_id) on delete set null,
+  summary text,
+  impact jsonb not null default '{}'::jsonb,
+  root_cause text,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.kds_anomalies (
+  id bigint generated always as identity primary key,
+  anomaly_type text not null,
+  severity public.kds_severity not null default 'warn',
+  status public.kds_anomaly_status not null default 'open',
+  detected_at timestamptz not null default timezone('utc', now()),
+  detector_name text not null default 'manual',
+  order_id uuid references public.orders(id) on delete set null,
+  station_id uuid references public.kitchen_stations(id) on delete set null,
+  session_id uuid references public.kitchen_sessions(id) on delete set null,
+  trace_id uuid,
+  expected_state jsonb not null default '{}'::jsonb,
+  observed_state jsonb not null default '{}'::jsonb,
+  incident_id uuid references public.kds_incidents(id) on delete set null,
+  resolved_at timestamptz,
+  resolution_note text,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.kds_incident_timeline (
+  id bigint generated always as identity primary key,
+  incident_id uuid not null references public.kds_incidents(id) on delete cascade,
+  event_type text not null,
+  actor_user_id uuid references public.staff_profiles(user_id) on delete set null,
+  details jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.kds_recovery_actions (
+  id uuid primary key default gen_random_uuid(),
+  incident_id uuid references public.kds_incidents(id) on delete set null,
+  action_type text not null,
+  target_order_id uuid references public.orders(id) on delete set null,
+  target_session_id uuid references public.kitchen_sessions(id) on delete set null,
+  requested_by uuid references public.staff_profiles(user_id) on delete set null,
+  requested_at timestamptz not null default timezone('utc', now()),
+  started_at timestamptz,
+  finished_at timestamptz,
+  status public.kds_recovery_status not null default 'pending',
+  before_state jsonb not null default '{}'::jsonb,
+  after_state jsonb not null default '{}'::jsonb,
+  error text
+);
 
 -------------------------------------------------------------------------------
 -- 5) INDEXES
@@ -518,6 +780,52 @@ create index if not exists order_events_station_created_idx
 
 create index if not exists order_events_type_created_idx
   on public.order_events (event_type, created_at desc);
+
+create index if not exists order_events_command_id_idx
+  on public.order_events (command_id)
+  where command_id is not null;
+
+create index if not exists order_events_order_version_idx
+  on public.order_events (order_id, version_after desc);
+
+create index if not exists orders_state_version_idx
+  on public.orders (id, state_version);
+
+create index if not exists kds_command_log_order_received_idx
+  on public.kds_command_log (order_id, received_at desc);
+
+create index if not exists kds_command_log_result_received_idx
+  on public.kds_command_log (result, received_at desc);
+
+create index if not exists kds_command_log_session_received_idx
+  on public.kds_command_log (actor_session_id, received_at desc)
+  where actor_session_id is not null;
+
+create index if not exists kds_technical_events_severity_created_idx
+  on public.kds_technical_events (severity, created_at desc);
+
+create index if not exists kds_technical_events_component_created_idx
+  on public.kds_technical_events (component, created_at desc);
+
+create index if not exists kds_technical_events_order_created_idx
+  on public.kds_technical_events (order_id, created_at desc)
+  where order_id is not null;
+
+create index if not exists kds_client_heartbeats_station_seen_idx
+  on public.kds_client_heartbeats (station_id, last_seen_at desc);
+
+create index if not exists kds_anomalies_status_severity_detected_idx
+  on public.kds_anomalies (status, severity, detected_at desc);
+
+create index if not exists kds_anomalies_order_detected_idx
+  on public.kds_anomalies (order_id, detected_at desc)
+  where order_id is not null;
+
+create index if not exists kds_incidents_status_detected_idx
+  on public.kds_incidents (status, detected_at desc);
+
+create index if not exists kds_recovery_actions_status_requested_idx
+  on public.kds_recovery_actions (status, requested_at desc);
 
 -------------------------------------------------------------------------------
 -- 6) SHARED TRIGGER FUNCTIONS
@@ -621,6 +929,48 @@ language sql
 stable
 as $$
   select nullif(current_setting('app.kds_reason_code', true), '')
+$$;
+
+create or replace function public.current_command_id()
+returns uuid
+language plpgsql
+stable
+as $$
+declare
+  v_raw text;
+begin
+  v_raw := nullif(current_setting('app.kds_command_id', true), '');
+  if v_raw is null then
+    return null;
+  end if;
+
+  begin
+    return v_raw::uuid;
+  exception when others then
+    return null;
+  end;
+end;
+$$;
+
+create or replace function public.current_trace_id()
+returns uuid
+language plpgsql
+stable
+as $$
+declare
+  v_raw text;
+begin
+  v_raw := nullif(current_setting('app.kds_trace_id', true), '');
+  if v_raw is null then
+    return null;
+  end if;
+
+  begin
+    return v_raw::uuid;
+  exception when others then
+    return null;
+  end;
+end;
 $$;
 
 create or replace function public.can_view_station(p_station_id uuid)
@@ -867,10 +1217,43 @@ as $$
 declare
   v_current public.orders%rowtype;
   v_updated public.orders%rowtype;
+  v_command_id uuid := gen_random_uuid();
+  v_trace_id uuid := gen_random_uuid();
+  v_received_at timestamptz := timezone('utc', now());
+  v_started_at timestamptz;
+  v_finished_at timestamptz;
 begin
   if auth.uid() is null and public.current_jwt_role() <> 'service_role' then
     raise exception 'authentication required';
   end if;
+
+  insert into public.kds_command_log (
+    id,
+    trace_id,
+    order_id,
+    command_type,
+    requested_to_status,
+    actor_user_id,
+    actor_session_id,
+    received_at,
+    result
+  )
+  values (
+    v_command_id,
+    v_trace_id,
+    p_order_id,
+    'move_status',
+    p_to_status,
+    auth.uid(),
+    p_actor_session_id,
+    v_received_at,
+    'accepted'
+  );
+
+  v_started_at := timezone('utc', now());
+  update public.kds_command_log
+  set started_at = v_started_at
+  where id = v_command_id;
 
   select *
   into v_current
@@ -880,11 +1263,32 @@ begin
   for update;
 
   if not found then
+    v_finished_at := timezone('utc', now());
+    update public.kds_command_log
+    set
+      finished_at = v_finished_at,
+      latency_ms = (extract(epoch from (v_finished_at - v_received_at)) * 1000)::integer,
+      result = 'rejected',
+      error_class = 'business_validation',
+      error_code = 'ORDER_NOT_FOUND',
+      error_message = 'order not found'
+    where id = v_command_id;
     raise exception 'order not found';
   end if;
 
   if p_expected_updated_at is not null
      and v_current.updated_at is distinct from p_expected_updated_at then
+    v_finished_at := timezone('utc', now());
+    update public.kds_command_log
+    set
+      finished_at = v_finished_at,
+      latency_ms = (extract(epoch from (v_finished_at - v_received_at)) * 1000)::integer,
+      expected_version = v_current.state_version,
+      result = 'rejected',
+      error_class = 'conflict',
+      error_code = 'STALE_STATE',
+      error_message = 'order was updated by another process'
+    where id = v_command_id;
     raise exception 'order was updated by another process';
   end if;
 
@@ -892,21 +1296,68 @@ begin
     public.is_privileged_role()
     or public.can_update_station_status(v_current.station_id)
   ) then
+    v_finished_at := timezone('utc', now());
+    update public.kds_command_log
+    set
+      finished_at = v_finished_at,
+      latency_ms = (extract(epoch from (v_finished_at - v_received_at)) * 1000)::integer,
+      expected_version = v_current.state_version,
+      result = 'rejected',
+      error_class = 'auth',
+      error_code = 'FORBIDDEN_STATION',
+      error_message = 'you are not allowed to update status for this station'
+    where id = v_command_id;
     raise exception 'you are not allowed to update status for this station';
   end if;
 
   if not public.is_valid_order_transition(v_current.status, p_to_status) then
+    v_finished_at := timezone('utc', now());
+    update public.kds_command_log
+    set
+      finished_at = v_finished_at,
+      latency_ms = (extract(epoch from (v_finished_at - v_received_at)) * 1000)::integer,
+      expected_version = v_current.state_version,
+      result = 'rejected',
+      error_class = 'business_validation',
+      error_code = 'INVALID_TRANSITION',
+      error_message = format('invalid order status transition: %s -> %s', v_current.status, p_to_status)
+    where id = v_command_id;
     raise exception 'invalid order status transition: % -> %', v_current.status, p_to_status;
   end if;
 
   if p_to_status = 'cancelled'
      and (p_reason_code is null or btrim(p_reason_code) = '') then
+    v_finished_at := timezone('utc', now());
+    update public.kds_command_log
+    set
+      finished_at = v_finished_at,
+      latency_ms = (extract(epoch from (v_finished_at - v_received_at)) * 1000)::integer,
+      expected_version = v_current.state_version,
+      result = 'rejected',
+      error_class = 'business_validation',
+      error_code = 'MISSING_REASON',
+      error_message = 'reason_code is required for cancelled status'
+    where id = v_command_id;
     raise exception 'reason_code is required for cancelled status';
   end if;
 
   if v_current.status = p_to_status then
+    v_finished_at := timezone('utc', now());
+    update public.kds_command_log
+    set
+      finished_at = v_finished_at,
+      latency_ms = (extract(epoch from (v_finished_at - v_received_at)) * 1000)::integer,
+      expected_version = v_current.state_version,
+      result = 'noop',
+      error_class = null,
+      error_code = null,
+      error_message = null
+    where id = v_command_id;
     return v_current;
   end if;
+
+  perform set_config('app.kds_command_id', v_command_id::text, true);
+  perform set_config('app.kds_trace_id', v_trace_id::text, true);
 
   if p_actor_session_id is not null then
     perform set_config('app.kds_session_id', p_actor_session_id::text, true);
@@ -921,7 +1372,67 @@ begin
   where id = p_order_id
   returning * into v_updated;
 
+  v_finished_at := timezone('utc', now());
+  update public.kds_command_log
+  set
+    finished_at = v_finished_at,
+    latency_ms = (extract(epoch from (v_finished_at - v_received_at)) * 1000)::integer,
+    expected_version = v_current.state_version,
+    result = 'accepted',
+    error_class = null,
+    error_code = null,
+    error_message = null
+  where id = v_command_id;
+
   return v_updated;
+exception
+  when others then
+    v_finished_at := timezone('utc', now());
+
+    update public.kds_command_log
+    set
+      finished_at = coalesce(finished_at, v_finished_at),
+      latency_ms = coalesce(latency_ms, (extract(epoch from (v_finished_at - v_received_at)) * 1000)::integer),
+      result = case when result in ('rejected', 'noop') then result else 'failed' end,
+      error_class = coalesce(error_class, 'system'),
+      error_code = coalesce(error_code, sqlstate),
+      error_message = coalesce(error_message, sqlerrm),
+      error_context = error_context || jsonb_build_object(
+        'order_id', p_order_id,
+        'requested_to_status', p_to_status
+      )
+    where id = v_command_id;
+
+    insert into public.kds_technical_events (
+      severity,
+      component,
+      event_name,
+      trace_id,
+      command_id,
+      order_id,
+      session_id,
+      actor_user_id,
+      error_class,
+      error_code,
+      message,
+      payload
+    )
+    values (
+      'error',
+      'rpc',
+      'kds_move_order_status_failed',
+      v_trace_id,
+      v_command_id,
+      p_order_id,
+      p_actor_session_id,
+      auth.uid(),
+      'system',
+      sqlstate,
+      sqlerrm,
+      jsonb_build_object('requested_to_status', p_to_status)
+    );
+
+    raise;
 end;
 $$;
 
@@ -940,10 +1451,39 @@ as $$
 declare
   v_current public.orders%rowtype;
   v_updated public.orders%rowtype;
+  v_command_id uuid := gen_random_uuid();
+  v_trace_id uuid := gen_random_uuid();
+  v_received_at timestamptz := timezone('utc', now());
+  v_finished_at timestamptz;
 begin
   if auth.uid() is null and public.current_jwt_role() <> 'service_role' then
     raise exception 'authentication required';
   end if;
+
+  insert into public.kds_command_log (
+    id,
+    trace_id,
+    order_id,
+    command_type,
+    actor_user_id,
+    actor_session_id,
+    received_at,
+    result
+  )
+  values (
+    v_command_id,
+    v_trace_id,
+    p_order_id,
+    'update_note',
+    auth.uid(),
+    p_actor_session_id,
+    v_received_at,
+    'accepted'
+  );
+
+  update public.kds_command_log
+  set started_at = timezone('utc', now())
+  where id = v_command_id;
 
   select *
   into v_current
@@ -953,11 +1493,32 @@ begin
   for update;
 
   if not found then
+    v_finished_at := timezone('utc', now());
+    update public.kds_command_log
+    set
+      finished_at = v_finished_at,
+      latency_ms = (extract(epoch from (v_finished_at - v_received_at)) * 1000)::integer,
+      result = 'rejected',
+      error_class = 'business_validation',
+      error_code = 'ORDER_NOT_FOUND',
+      error_message = 'order not found'
+    where id = v_command_id;
     raise exception 'order not found';
   end if;
 
   if p_expected_updated_at is not null
      and v_current.updated_at is distinct from p_expected_updated_at then
+    v_finished_at := timezone('utc', now());
+    update public.kds_command_log
+    set
+      finished_at = v_finished_at,
+      latency_ms = (extract(epoch from (v_finished_at - v_received_at)) * 1000)::integer,
+      expected_version = v_current.state_version,
+      result = 'rejected',
+      error_class = 'conflict',
+      error_code = 'STALE_STATE',
+      error_message = 'order was updated by another process'
+    where id = v_command_id;
     raise exception 'order was updated by another process';
   end if;
 
@@ -965,8 +1526,22 @@ begin
     public.is_privileged_role()
     or public.can_update_station_status(v_current.station_id)
   ) then
+    v_finished_at := timezone('utc', now());
+    update public.kds_command_log
+    set
+      finished_at = v_finished_at,
+      latency_ms = (extract(epoch from (v_finished_at - v_received_at)) * 1000)::integer,
+      expected_version = v_current.state_version,
+      result = 'rejected',
+      error_class = 'auth',
+      error_code = 'FORBIDDEN_STATION',
+      error_message = 'you are not allowed to update note for this station'
+    where id = v_command_id;
     raise exception 'you are not allowed to update note for this station';
   end if;
+
+  perform set_config('app.kds_command_id', v_command_id::text, true);
+  perform set_config('app.kds_trace_id', v_trace_id::text, true);
 
   if p_actor_session_id is not null then
     perform set_config('app.kds_session_id', p_actor_session_id::text, true);
@@ -981,7 +1556,61 @@ begin
   where id = p_order_id
   returning * into v_updated;
 
+  v_finished_at := timezone('utc', now());
+  update public.kds_command_log
+  set
+    finished_at = v_finished_at,
+    latency_ms = (extract(epoch from (v_finished_at - v_received_at)) * 1000)::integer,
+    expected_version = v_current.state_version,
+    result = case
+      when v_current.special_instructions is not distinct from p_special_instructions then 'noop'
+      else 'accepted'
+    end
+  where id = v_command_id;
+
   return v_updated;
+exception
+  when others then
+    v_finished_at := timezone('utc', now());
+    update public.kds_command_log
+    set
+      finished_at = coalesce(finished_at, v_finished_at),
+      latency_ms = coalesce(latency_ms, (extract(epoch from (v_finished_at - v_received_at)) * 1000)::integer),
+      result = case when result in ('rejected', 'noop') then result else 'failed' end,
+      error_class = coalesce(error_class, 'system'),
+      error_code = coalesce(error_code, sqlstate),
+      error_message = coalesce(error_message, sqlerrm),
+      error_context = error_context || jsonb_build_object('order_id', p_order_id)
+    where id = v_command_id;
+
+    insert into public.kds_technical_events (
+      severity,
+      component,
+      event_name,
+      trace_id,
+      command_id,
+      order_id,
+      session_id,
+      actor_user_id,
+      error_class,
+      error_code,
+      message
+    )
+    values (
+      'error',
+      'rpc',
+      'kds_update_order_note_failed',
+      v_trace_id,
+      v_command_id,
+      p_order_id,
+      p_actor_session_id,
+      auth.uid(),
+      'system',
+      sqlstate,
+      sqlerrm
+    );
+
+    raise;
 end;
 $$;
 
@@ -994,6 +1623,388 @@ grant execute on function public.kds_move_order_status(uuid, public.order_status
 revoke all on function public.kds_update_order_note(uuid, text, text, uuid, timestamptz) from public;
 grant execute on function public.kds_update_order_note(uuid, text, text, uuid, timestamptz) to authenticated, service_role;
 
+create or replace function public.kds_log_technical_event(
+  p_severity public.kds_severity,
+  p_component text,
+  p_event_name text,
+  p_message text default null,
+  p_payload jsonb default '{}'::jsonb,
+  p_order_id uuid default null,
+  p_session_id uuid default null,
+  p_command_id uuid default null,
+  p_trace_id uuid default null,
+  p_error_class text default null,
+  p_error_code text default null
+)
+returns bigint
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id bigint;
+begin
+  if auth.uid() is null and public.current_jwt_role() <> 'service_role' then
+    raise exception 'authentication required';
+  end if;
+
+  insert into public.kds_technical_events (
+    severity,
+    component,
+    event_name,
+    trace_id,
+    command_id,
+    order_id,
+    session_id,
+    actor_user_id,
+    error_class,
+    error_code,
+    message,
+    payload
+  )
+  values (
+    coalesce(p_severity, 'info'),
+    p_component,
+    p_event_name,
+    coalesce(p_trace_id, public.current_trace_id()),
+    coalesce(p_command_id, public.current_command_id()),
+    p_order_id,
+    coalesce(p_session_id, public.current_kds_session_id()),
+    auth.uid(),
+    p_error_class,
+    p_error_code,
+    p_message,
+    coalesce(p_payload, '{}'::jsonb)
+  )
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+create or replace function public.kds_report_client_heartbeat(
+  p_session_id uuid,
+  p_station_id uuid,
+  p_connection_state text,
+  p_max_order_version_seen bigint default 0,
+  p_board_checksum text default null,
+  p_active_counts jsonb default '{}'::jsonb,
+  p_last_error_code text default null,
+  p_details jsonb default '{}'::jsonb,
+  p_client_time timestamptz default null
+)
+returns public.kds_client_heartbeats
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.kds_client_heartbeats%rowtype;
+  v_session public.kitchen_sessions%rowtype;
+  v_clock_skew integer;
+begin
+  if auth.uid() is null and public.current_jwt_role() <> 'service_role' then
+    raise exception 'authentication required';
+  end if;
+
+  select *
+  into v_session
+  from public.kitchen_sessions
+  where id = p_session_id
+  limit 1;
+
+  if not found then
+    raise exception 'session not found';
+  end if;
+
+  if not (
+    public.is_privileged_role()
+    or v_session.staff_user_id = auth.uid()
+    or v_session.staff_user_id is null
+  ) then
+    raise exception 'session does not belong to current user';
+  end if;
+
+  if p_client_time is null then
+    v_clock_skew := null;
+  else
+    v_clock_skew := extract(epoch from (timezone('utc', now()) - p_client_time))::integer * 1000;
+  end if;
+
+  insert into public.kds_client_heartbeats (
+    session_id,
+    station_id,
+    connection_state,
+    max_order_version_seen,
+    board_checksum,
+    active_counts,
+    last_error_code,
+    details,
+    client_time,
+    clock_skew_ms,
+    last_seen_at,
+    last_realtime_event_at,
+    updated_at
+  )
+  values (
+    p_session_id,
+    p_station_id,
+    coalesce(p_connection_state, 'connecting'),
+    greatest(coalesce(p_max_order_version_seen, 0), 0),
+    p_board_checksum,
+    coalesce(p_active_counts, '{}'::jsonb),
+    p_last_error_code,
+    coalesce(p_details, '{}'::jsonb),
+    p_client_time,
+    v_clock_skew,
+    timezone('utc', now()),
+    timezone('utc', now()),
+    timezone('utc', now())
+  )
+  on conflict (session_id) do update
+  set
+    station_id = excluded.station_id,
+    connection_state = excluded.connection_state,
+    max_order_version_seen = excluded.max_order_version_seen,
+    board_checksum = excluded.board_checksum,
+    active_counts = excluded.active_counts,
+    last_error_code = excluded.last_error_code,
+    details = excluded.details,
+    client_time = excluded.client_time,
+    clock_skew_ms = excluded.clock_skew_ms,
+    last_seen_at = timezone('utc', now()),
+    last_realtime_event_at = timezone('utc', now()),
+    updated_at = timezone('utc', now())
+  returning * into v_row;
+
+  update public.kitchen_sessions
+  set
+    last_seen_at = timezone('utc', now()),
+    status = 'active'
+  where id = p_session_id;
+
+  return v_row;
+end;
+$$;
+
+create or replace function public.kds_run_basic_consistency_scan()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_duplicate_count integer := 0;
+  v_stale_session_count integer := 0;
+  v_divergence_count integer := 0;
+begin
+  -- Duplicate active orders by business_date + order_number.
+  with duplicates as (
+    select business_date, order_number
+    from public.orders
+    where archived_at is null
+      and status in ('new', 'prep', 'ready')
+    group by business_date, order_number
+    having count(*) > 1
+  )
+  insert into public.kds_anomalies (
+    anomaly_type,
+    severity,
+    status,
+    detector_name,
+    expected_state,
+    observed_state
+  )
+  select
+    'duplicate_order',
+    'critical',
+    'open',
+    'kds_run_basic_consistency_scan',
+    jsonb_build_object('uniqueness', 'business_date+order_number should be unique in active set'),
+    jsonb_build_object('business_date', d.business_date, 'order_number', d.order_number)
+  from duplicates d
+  where not exists (
+    select 1
+    from public.kds_anomalies a
+    where a.anomaly_type = 'duplicate_order'
+      and a.status in ('open', 'acknowledged')
+      and a.observed_state ->> 'business_date' = d.business_date::text
+      and a.observed_state ->> 'order_number' = d.order_number::text
+  );
+
+  get diagnostics v_duplicate_count = row_count;
+
+  -- Stale client sessions (no heartbeat > 45s).
+  insert into public.kds_anomalies (
+    anomaly_type,
+    severity,
+    status,
+    detector_name,
+    station_id,
+    session_id,
+    expected_state,
+    observed_state
+  )
+  select
+    'stale_snapshot',
+    'error',
+    'open',
+    'kds_run_basic_consistency_scan',
+    hb.station_id,
+    hb.session_id,
+    jsonb_build_object('heartbeat_max_age_sec', 45),
+    jsonb_build_object('last_seen_at', hb.last_seen_at, 'connection_state', hb.connection_state)
+  from public.kds_client_heartbeats hb
+  where hb.last_seen_at < timezone('utc', now()) - interval '45 seconds'
+    and not exists (
+      select 1
+      from public.kds_anomalies a
+      where a.anomaly_type = 'stale_snapshot'
+        and a.status in ('open', 'acknowledged')
+        and a.session_id = hb.session_id
+    );
+
+  get diagnostics v_stale_session_count = row_count;
+
+  -- Station divergence by checksum mismatch on active sessions.
+  with station_checksums as (
+    select
+      station_id,
+      count(distinct board_checksum) as checksum_variants
+    from public.kds_client_heartbeats
+    where connection_state = 'live'
+      and last_seen_at >= timezone('utc', now()) - interval '45 seconds'
+      and board_checksum is not null
+    group by station_id
+    having count(distinct board_checksum) > 1
+  )
+  insert into public.kds_anomalies (
+    anomaly_type,
+    severity,
+    status,
+    detector_name,
+    station_id,
+    expected_state,
+    observed_state
+  )
+  select
+    'screen_divergence',
+    'critical',
+    'open',
+    'kds_run_basic_consistency_scan',
+    sc.station_id,
+    jsonb_build_object('checksum_variants', 1),
+    jsonb_build_object('checksum_variants', sc.checksum_variants)
+  from station_checksums sc
+  where not exists (
+    select 1
+    from public.kds_anomalies a
+    where a.anomaly_type = 'screen_divergence'
+      and a.status in ('open', 'acknowledged')
+      and a.station_id = sc.station_id
+  );
+
+  get diagnostics v_divergence_count = row_count;
+
+  return jsonb_build_object(
+    'inserted_duplicates', v_duplicate_count,
+    'inserted_stale_sessions', v_stale_session_count,
+    'inserted_divergence', v_divergence_count,
+    'open_anomalies',
+      (
+        select count(*)
+        from public.kds_anomalies
+        where status in ('open', 'acknowledged')
+      )
+  );
+end;
+$$;
+
+create or replace function public.kds_create_incident_from_open_anomalies(
+  p_title text,
+  p_severity public.kds_severity default 'error',
+  p_summary text default null
+)
+returns public.kds_incidents
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_incident public.kds_incidents%rowtype;
+begin
+  if auth.uid() is null and public.current_jwt_role() <> 'service_role' then
+    raise exception 'authentication required';
+  end if;
+
+  if not (public.is_privileged_role() or public.current_staff_role() in ('manager', 'admin')) then
+    raise exception 'incident creation requires manager role';
+  end if;
+
+  insert into public.kds_incidents (
+    title,
+    severity,
+    status,
+    detected_at,
+    owner_user_id,
+    summary,
+    impact
+  )
+  values (
+    p_title,
+    coalesce(p_severity, 'error'),
+    'open',
+    timezone('utc', now()),
+    auth.uid(),
+    p_summary,
+    jsonb_build_object(
+      'open_anomaly_count',
+      (
+        select count(*)
+        from public.kds_anomalies
+        where status in ('open', 'acknowledged')
+      )
+    )
+  )
+  returning * into v_incident;
+
+  update public.kds_anomalies
+  set
+    incident_id = v_incident.id,
+    status = case when status = 'open' then 'acknowledged' else status end,
+    updated_at = timezone('utc', now())
+  where status in ('open', 'acknowledged')
+    and incident_id is null;
+
+  insert into public.kds_incident_timeline (
+    incident_id,
+    event_type,
+    actor_user_id,
+    details
+  )
+  values (
+    v_incident.id,
+    'incident_created',
+    auth.uid(),
+    jsonb_build_object('summary', p_summary)
+  );
+
+  return v_incident;
+end;
+$$;
+
+revoke all on function public.kds_log_technical_event(public.kds_severity, text, text, text, jsonb, uuid, uuid, uuid, uuid, text, text) from public;
+grant execute on function public.kds_log_technical_event(public.kds_severity, text, text, text, jsonb, uuid, uuid, uuid, uuid, text, text) to authenticated, service_role;
+
+revoke all on function public.kds_report_client_heartbeat(uuid, uuid, text, bigint, text, jsonb, text, jsonb, timestamptz) from public;
+grant execute on function public.kds_report_client_heartbeat(uuid, uuid, text, bigint, text, jsonb, text, jsonb, timestamptz) to authenticated, service_role;
+
+revoke all on function public.kds_run_basic_consistency_scan() from public;
+grant execute on function public.kds_run_basic_consistency_scan() to authenticated, service_role;
+
+revoke all on function public.kds_create_incident_from_open_anomalies(text, public.kds_severity, text) from public;
+grant execute on function public.kds_create_incident_from_open_anomalies(text, public.kds_severity, text) to authenticated, service_role;
+
 -------------------------------------------------------------------------------
 -- 7) BUSINESS RULE TRIGGERS
 -------------------------------------------------------------------------------
@@ -1002,6 +2013,8 @@ create or replace function public.prepare_order_on_insert()
 returns trigger
 language plpgsql
 as $$
+declare
+  v_command_id uuid := public.current_command_id();
 begin
   if new.placed_at is null then
     new.placed_at := timezone('utc', now());
@@ -1018,6 +2031,14 @@ begin
   if auth.uid() is not null then
     new.created_by := coalesce(new.created_by, auth.uid());
     new.updated_by := coalesce(new.updated_by, auth.uid());
+  end if;
+
+  if new.state_version is null or new.state_version < 1 then
+    new.state_version := 1;
+  end if;
+
+  if v_command_id is not null then
+    new.last_command_id := v_command_id;
   end if;
 
   new.updated_at := timezone('utc', now());
@@ -1043,6 +2064,9 @@ create or replace function public.apply_order_business_rules()
 returns trigger
 language plpgsql
 as $$
+declare
+  v_command_id uuid := public.current_command_id();
+  v_business_change boolean := false;
 begin
   new.updated_at := timezone('utc', now());
 
@@ -1051,6 +2075,7 @@ begin
   end if;
 
   if new.station_id is distinct from old.station_id then
+    v_business_change := true;
     if not (
       public.is_privileged_role()
       or public.can_manage_station(old.station_id)
@@ -1061,6 +2086,7 @@ begin
   end if;
 
   if new.status is distinct from old.status then
+    v_business_change := true;
     if not public.is_valid_order_transition(old.status, new.status) then
       raise exception 'invalid order status transition: % -> %', old.status, new.status;
     end if;
@@ -1099,6 +2125,20 @@ begin
     end if;
   end if;
 
+  if new.special_instructions is distinct from old.special_instructions then
+    v_business_change := true;
+  end if;
+
+  if v_business_change then
+    new.state_version := coalesce(old.state_version, 1) + 1;
+    if v_command_id is not null then
+      new.last_command_id := v_command_id;
+    end if;
+  else
+    new.state_version := coalesce(old.state_version, 1);
+    new.last_command_id := coalesce(old.last_command_id, new.last_command_id);
+  end if;
+
   return new;
 end;
 $$;
@@ -1114,6 +2154,12 @@ declare
   v_actor_session_id uuid := public.current_kds_session_id();
   v_actor_type text := public.current_actor_type();
   v_reason_code text := public.current_reason_code();
+  v_command_id uuid := public.current_command_id();
+  v_trace_id uuid := public.current_trace_id();
+  v_event_origin text := case
+    when public.current_command_id() is not null then 'rpc'
+    else 'trigger'
+  end;
 begin
   if tg_op = 'INSERT' then
     insert into public.order_events (
@@ -1125,6 +2171,10 @@ begin
       actor_session_id,
       actor_type,
       reason_code,
+      command_id,
+      trace_id,
+      version_after,
+      event_origin,
       payload
     )
     values (
@@ -1136,6 +2186,10 @@ begin
       v_actor_session_id,
       v_actor_type,
       v_reason_code,
+      v_command_id,
+      v_trace_id,
+      coalesce(new.state_version, 1),
+      v_event_origin,
       jsonb_build_object(
         'source', new.source,
         'priority', new.priority
@@ -1156,6 +2210,10 @@ begin
       actor_session_id,
       actor_type,
       reason_code,
+      command_id,
+      trace_id,
+      version_after,
+      event_origin,
       payload
     )
     values (
@@ -1168,6 +2226,10 @@ begin
       v_actor_session_id,
       v_actor_type,
       v_reason_code,
+      v_command_id,
+      v_trace_id,
+      coalesce(new.state_version, 1),
+      v_event_origin,
       jsonb_build_object(
         'priority', new.priority,
         'source', new.source
@@ -1184,6 +2246,10 @@ begin
       actor_session_id,
       actor_type,
       reason_code,
+      command_id,
+      trace_id,
+      version_after,
+      event_origin,
       payload
     )
     values (
@@ -1194,6 +2260,10 @@ begin
       v_actor_session_id,
       v_actor_type,
       v_reason_code,
+      v_command_id,
+      v_trace_id,
+      coalesce(new.state_version, 1),
+      v_event_origin,
       jsonb_build_object(
         'from_station_id', old.station_id,
         'to_station_id', new.station_id
@@ -1210,6 +2280,10 @@ begin
       actor_session_id,
       actor_type,
       reason_code,
+      command_id,
+      trace_id,
+      version_after,
+      event_origin,
       payload
     )
     values (
@@ -1220,6 +2294,10 @@ begin
       v_actor_session_id,
       v_actor_type,
       v_reason_code,
+      v_command_id,
+      v_trace_id,
+      coalesce(new.state_version, 1),
+      v_event_origin,
       jsonb_build_object(
         'old_note', old.special_instructions,
         'new_note', new.special_instructions
@@ -1384,6 +2462,21 @@ create trigger trg_kitchen_sessions_set_updated_at
 before update on public.kitchen_sessions
 for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_kds_client_heartbeats_set_updated_at on public.kds_client_heartbeats;
+create trigger trg_kds_client_heartbeats_set_updated_at
+before update on public.kds_client_heartbeats
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_kds_incidents_set_updated_at on public.kds_incidents;
+create trigger trg_kds_incidents_set_updated_at
+before update on public.kds_incidents
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_kds_anomalies_set_updated_at on public.kds_anomalies;
+create trigger trg_kds_anomalies_set_updated_at
+before update on public.kds_anomalies
+for each row execute function public.set_updated_at();
+
 -------------------------------------------------------------------------------
 -- 8) RLS POLICIES
 -------------------------------------------------------------------------------
@@ -1397,6 +2490,13 @@ alter table public.order_item_modifiers enable row level security;
 alter table public.order_station_assignments enable row level security;
 alter table public.kitchen_sessions enable row level security;
 alter table public.order_events enable row level security;
+alter table public.kds_command_log enable row level security;
+alter table public.kds_technical_events enable row level security;
+alter table public.kds_client_heartbeats enable row level security;
+alter table public.kds_incidents enable row level security;
+alter table public.kds_anomalies enable row level security;
+alter table public.kds_incident_timeline enable row level security;
+alter table public.kds_recovery_actions enable row level security;
 
 -- Remove legacy permissive policies (if present from old schema).
 drop policy if exists "kds_read_orders" on public.orders;
@@ -1636,6 +2736,158 @@ create policy "order_events_select"
 -- Audit log should be immutable from client side.
 revoke insert, update, delete on public.order_events from anon, authenticated;
 
+drop policy if exists "kds_command_log_select" on public.kds_command_log;
+create policy "kds_command_log_select"
+  on public.kds_command_log
+  for select
+  to authenticated
+  using (
+    public.is_privileged_role()
+    or exists (
+      select 1
+      from public.orders o
+      where o.id = kds_command_log.order_id
+        and public.can_view_station(o.station_id)
+    )
+  );
+
+drop policy if exists "kds_command_log_manage" on public.kds_command_log;
+create policy "kds_command_log_manage"
+  on public.kds_command_log
+  for all
+  to authenticated
+  using (public.is_privileged_role() or public.current_jwt_role() = 'service_role')
+  with check (public.is_privileged_role() or public.current_jwt_role() = 'service_role');
+
+drop policy if exists "kds_technical_events_select" on public.kds_technical_events;
+create policy "kds_technical_events_select"
+  on public.kds_technical_events
+  for select
+  to authenticated
+  using (
+    public.is_privileged_role()
+    or (session_id is not null and exists (
+      select 1
+      from public.kitchen_sessions ks
+      where ks.id = kds_technical_events.session_id
+        and (ks.staff_user_id = auth.uid() or public.can_view_station(ks.station_id))
+    ))
+    or (order_id is not null and exists (
+      select 1
+      from public.orders o
+      where o.id = kds_technical_events.order_id
+        and public.can_view_station(o.station_id)
+    ))
+  );
+
+drop policy if exists "kds_technical_events_manage" on public.kds_technical_events;
+create policy "kds_technical_events_manage"
+  on public.kds_technical_events
+  for all
+  to authenticated
+  using (public.is_privileged_role() or public.current_jwt_role() = 'service_role')
+  with check (public.is_privileged_role() or public.current_jwt_role() = 'service_role');
+
+drop policy if exists "kds_client_heartbeats_select" on public.kds_client_heartbeats;
+create policy "kds_client_heartbeats_select"
+  on public.kds_client_heartbeats
+  for select
+  to authenticated
+  using (public.can_view_station(station_id) or public.is_privileged_role());
+
+drop policy if exists "kds_client_heartbeats_manage" on public.kds_client_heartbeats;
+create policy "kds_client_heartbeats_manage"
+  on public.kds_client_heartbeats
+  for all
+  to authenticated
+  using (public.is_privileged_role() or public.current_jwt_role() = 'service_role')
+  with check (public.is_privileged_role() or public.current_jwt_role() = 'service_role');
+
+drop policy if exists "kds_incidents_select" on public.kds_incidents;
+create policy "kds_incidents_select"
+  on public.kds_incidents
+  for select
+  to authenticated
+  using (public.is_privileged_role() or public.current_staff_role() in ('manager', 'admin'));
+
+drop policy if exists "kds_incidents_manage" on public.kds_incidents;
+create policy "kds_incidents_manage"
+  on public.kds_incidents
+  for all
+  to authenticated
+  using (public.is_privileged_role() or public.current_staff_role() in ('manager', 'admin'))
+  with check (public.is_privileged_role() or public.current_staff_role() in ('manager', 'admin'));
+
+drop policy if exists "kds_anomalies_select" on public.kds_anomalies;
+create policy "kds_anomalies_select"
+  on public.kds_anomalies
+  for select
+  to authenticated
+  using (
+    public.is_privileged_role()
+    or (station_id is not null and public.can_view_station(station_id))
+    or (order_id is not null and exists (
+      select 1
+      from public.orders o
+      where o.id = kds_anomalies.order_id
+        and public.can_view_station(o.station_id)
+    ))
+  );
+
+drop policy if exists "kds_anomalies_manage" on public.kds_anomalies;
+create policy "kds_anomalies_manage"
+  on public.kds_anomalies
+  for all
+  to authenticated
+  using (public.is_privileged_role() or public.current_staff_role() in ('manager', 'admin'))
+  with check (public.is_privileged_role() or public.current_staff_role() in ('manager', 'admin'));
+
+drop policy if exists "kds_incident_timeline_select" on public.kds_incident_timeline;
+create policy "kds_incident_timeline_select"
+  on public.kds_incident_timeline
+  for select
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.kds_incidents i
+      where i.id = kds_incident_timeline.incident_id
+        and (public.is_privileged_role() or public.current_staff_role() in ('manager', 'admin'))
+    )
+  );
+
+drop policy if exists "kds_incident_timeline_manage" on public.kds_incident_timeline;
+create policy "kds_incident_timeline_manage"
+  on public.kds_incident_timeline
+  for all
+  to authenticated
+  using (public.is_privileged_role() or public.current_staff_role() in ('manager', 'admin'))
+  with check (public.is_privileged_role() or public.current_staff_role() in ('manager', 'admin'));
+
+drop policy if exists "kds_recovery_actions_select" on public.kds_recovery_actions;
+create policy "kds_recovery_actions_select"
+  on public.kds_recovery_actions
+  for select
+  to authenticated
+  using (public.is_privileged_role() or public.current_staff_role() in ('manager', 'admin'));
+
+drop policy if exists "kds_recovery_actions_manage" on public.kds_recovery_actions;
+create policy "kds_recovery_actions_manage"
+  on public.kds_recovery_actions
+  for all
+  to authenticated
+  using (public.is_privileged_role() or public.current_staff_role() in ('manager', 'admin'))
+  with check (public.is_privileged_role() or public.current_staff_role() in ('manager', 'admin'));
+
+-- Keep observability/incident writes behind RPC/service and system triggers.
+revoke insert, update, delete on public.kds_command_log from anon, authenticated;
+revoke insert, update, delete on public.kds_technical_events from anon, authenticated;
+revoke insert, update, delete on public.kds_client_heartbeats from anon, authenticated;
+revoke insert, update, delete on public.kds_incidents from anon, authenticated;
+revoke insert, update, delete on public.kds_anomalies from anon, authenticated;
+revoke insert, update, delete on public.kds_incident_timeline from anon, authenticated;
+revoke insert, update, delete on public.kds_recovery_actions from anon, authenticated;
+
 -------------------------------------------------------------------------------
 -- 9) REALTIME PUBLICATION (TABLES ONLY)
 -------------------------------------------------------------------------------
@@ -1645,6 +2897,9 @@ alter table public.order_items replica identity full;
 alter table public.order_item_modifiers replica identity full;
 alter table public.order_events replica identity full;
 alter table public.kitchen_stations replica identity full;
+alter table public.kds_anomalies replica identity full;
+alter table public.kds_incidents replica identity full;
+alter table public.kds_client_heartbeats replica identity full;
 
 do $$
 begin
@@ -1671,6 +2926,21 @@ begin
 
     begin
       alter publication supabase_realtime add table public.kitchen_stations;
+    exception when duplicate_object then null;
+    end;
+
+    begin
+      alter publication supabase_realtime add table public.kds_anomalies;
+    exception when duplicate_object then null;
+    end;
+
+    begin
+      alter publication supabase_realtime add table public.kds_incidents;
+    exception when duplicate_object then null;
+    end;
+
+    begin
+      alter publication supabase_realtime add table public.kds_client_heartbeats;
     exception when duplicate_object then null;
     end;
   end if;
