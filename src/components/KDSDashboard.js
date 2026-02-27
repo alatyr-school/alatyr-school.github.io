@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import htm from "htm";
 import { KanbanColumn } from "./KanbanColumn.js";
 import { useKitchenOrders } from "../hooks/useKitchenOrders.js";
+import { useKdsDemoRuntime } from "../hooks/useKdsDemoRuntime.js";
 import {
   BOARD_COLUMNS,
   getElapsedMs,
@@ -18,98 +19,6 @@ const COLUMN_PRESENTATION = {
   prep: { sequence: "02", subtitle: "On the line" },
   ready: { sequence: "03", subtitle: "Handoff window" },
 };
-
-function buildDemoOrders() {
-  const now = Date.now();
-  return [
-    {
-      id: "demo-1001",
-      order_number: 1001,
-      status: "new",
-      placed_at: new Date(now - 3 * 60 * 1000).toISOString(),
-      started_at: null,
-      ready_at: null,
-      updated_at: new Date(now - 3 * 60 * 1000).toISOString(),
-      order_items: [
-        {
-          id: "demo-1001-1",
-          item_name: "Classic Burger",
-          quantity: 2,
-          modifiers: ["No onions", "Extra pickles"],
-          position: 1,
-        },
-        {
-          id: "demo-1001-2",
-          item_name: "Fries",
-          quantity: 1,
-          modifiers: ["Well done"],
-          position: 2,
-        },
-      ],
-    },
-    {
-      id: "demo-1002",
-      order_number: 1002,
-      status: "prep",
-      placed_at: new Date(now - 11 * 60 * 1000).toISOString(),
-      started_at: new Date(now - 8 * 60 * 1000).toISOString(),
-      ready_at: null,
-      updated_at: new Date(now - 8 * 60 * 1000).toISOString(),
-      order_items: [
-        {
-          id: "demo-1002-1",
-          item_name: "Double Cheeseburger",
-          quantity: 1,
-          modifiers: ["No mayo"],
-          position: 1,
-        },
-        {
-          id: "demo-1002-2",
-          item_name: "Onion Rings",
-          quantity: 1,
-          modifiers: [],
-          position: 2,
-        },
-      ],
-    },
-    {
-      id: "demo-1003",
-      order_number: 1003,
-      status: "ready",
-      placed_at: new Date(now - 18 * 60 * 1000).toISOString(),
-      started_at: new Date(now - 14 * 60 * 1000).toISOString(),
-      ready_at: new Date(now - 2 * 60 * 1000).toISOString(),
-      updated_at: new Date(now - 2 * 60 * 1000).toISOString(),
-      order_items: [
-        {
-          id: "demo-1003-1",
-          item_name: "Chicken Burger",
-          quantity: 1,
-          modifiers: ["No tomatoes"],
-          position: 1,
-        },
-      ],
-    },
-    {
-      id: "demo-1004",
-      order_number: 1004,
-      status: "new",
-      placed_at: new Date(now - 6 * 60 * 1000).toISOString(),
-      started_at: null,
-      ready_at: null,
-      updated_at: new Date(now - 6 * 60 * 1000).toISOString(),
-      order_items: [
-        {
-          id: "demo-1004-1",
-          item_name: "Bacon Burger",
-          quantity: 1,
-          modifiers: ["No onions", "No mustard"],
-          position: 1,
-        },
-      ],
-    },
-  ];
-}
 
 function statusClass(connectionState) {
   if (connectionState === "live") return "status-pill status-pill--live";
@@ -156,9 +65,34 @@ function playAlertTone() {
   }, 250);
 }
 
+function formatEventType(eventType) {
+  return eventType.replaceAll("_", " ");
+}
+
+function formatEventTransition(event) {
+  if (event.from_status && event.to_status) {
+    return `${event.from_status} -> ${event.to_status}`;
+  }
+  if (event.to_status) {
+    return `-> ${event.to_status}`;
+  }
+  return "state event";
+}
+
+function formatEventTime(timestampIso) {
+  const date = new Date(timestampIso);
+  if (Number.isNaN(date.getTime())) {
+    return timestampIso;
+  }
+  return date.toLocaleTimeString("uk-UA", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 export function KDSDashboard() {
   const [nowMs, setNowMs] = useState(Date.now());
-  const [demoOrders, setDemoOrders] = useState(() => buildDemoOrders());
   const [searchText, setSearchText] = useState("");
   const [lateOnly, setLateOnly] = useState(false);
   const [density, setDensity] = useState("comfortable");
@@ -175,6 +109,7 @@ export function KDSDashboard() {
     reloadOrders,
     isSupabaseConfigured,
   } = useKitchenOrders();
+  const demoRuntime = useKdsDemoRuntime({ enabled: !isSupabaseConfigured });
 
   useEffect(() => {
     const timerId = globalThis.setInterval(() => {
@@ -184,11 +119,24 @@ export function KDSDashboard() {
     return () => globalThis.clearInterval(timerId);
   }, []);
 
-  const activeOrders = isSupabaseConfigured ? orders : demoOrders;
+  const activeOrders = isSupabaseConfigured ? orders : demoRuntime.orders;
+  const workflowOrders = useMemo(
+    () =>
+      activeOrders.filter((order) =>
+        ["new", "prep", "ready"].includes(order.status)
+      ),
+    [activeOrders]
+  );
+  const activeUpdatingOrderIds = isSupabaseConfigured
+    ? updatingOrderIds
+    : demoRuntime.updatingOrderIds;
+  const activeError = isSupabaseConfigured ? error : demoRuntime.error;
 
   useEffect(() => {
     const currentLateIds = new Set(
-      activeOrders.filter((order) => isOrderLate(order, nowMs)).map((order) => order.id)
+      workflowOrders
+        .filter((order) => isOrderLate(order, nowMs))
+        .map((order) => order.id)
     );
 
     if (audioEnabled) {
@@ -206,10 +154,10 @@ export function KDSDashboard() {
     }
 
     previousLateOrderIdsRef.current = currentLateIds;
-  }, [activeOrders, nowMs, audioEnabled]);
+  }, [workflowOrders, nowMs, audioEnabled]);
 
   const filteredOrders = useMemo(() => {
-    const lateAwareOrders = activeOrders.filter((order) => {
+    const lateAwareOrders = workflowOrders.filter((order) => {
       if (lateOnly && !isOrderLate(order, nowMs)) {
         return false;
       }
@@ -233,7 +181,7 @@ export function KDSDashboard() {
     });
 
     return sortedOrders;
-  }, [activeOrders, lateOnly, nowMs, searchText, sortMode]);
+  }, [lateOnly, nowMs, searchText, sortMode, workflowOrders]);
 
   const groupedOrders = useMemo(() => {
     const groups = { new: [], prep: [], ready: [] };
@@ -245,10 +193,10 @@ export function KDSDashboard() {
     return groups;
   }, [filteredOrders]);
 
-  const totalOrders = activeOrders.length;
-  const lateOrders = activeOrders.filter((order) => isOrderLate(order, nowMs)).length;
-  const readyOrders = activeOrders.filter((order) => order.status === "ready").length;
-  const averageWait = formatAverageWait(activeOrders, nowMs);
+  const totalOrders = workflowOrders.length;
+  const lateOrders = workflowOrders.filter((order) => isOrderLate(order, nowMs)).length;
+  const readyOrders = workflowOrders.filter((order) => order.status === "ready").length;
+  const averageWait = formatAverageWait(workflowOrders, nowMs);
 
   const queueTone =
     lateOrders >= 5 || totalOrders >= 15
@@ -263,28 +211,9 @@ export function KDSDashboard() {
         moveOrder(orderId, nextStatus);
         return;
       }
-
-      const nowIso = new Date().toISOString();
-      setDemoOrders((current) =>
-        current.map((order) => {
-          if (order.id !== orderId) {
-            return order;
-          }
-
-          return {
-            ...order,
-            status: nextStatus,
-            started_at:
-              nextStatus === "new"
-                ? null
-                : order.started_at ?? nowIso,
-            ready_at: nextStatus === "ready" ? nowIso : null,
-            updated_at: nowIso,
-          };
-        })
-      );
+      demoRuntime.moveOrder(orderId, nextStatus);
     },
-    [isSupabaseConfigured, moveOrder]
+    [demoRuntime, isSupabaseConfigured, moveOrder]
   );
 
   const currentConnectionState = isSupabaseConfigured ? connectionState : "demo";
@@ -292,7 +221,7 @@ export function KDSDashboard() {
     ? connectionState === "live"
       ? "Live"
       : connectionState
-    : "Demo";
+    : "Demo DB";
   const queueHealthLabel =
     lateOrders > 0 ? `${lateOrders} delayed` : "On cadence";
 
@@ -327,10 +256,10 @@ export function KDSDashboard() {
                 `
               : html`
                   <${TouchButton}
-                    label="Reset Demo"
+                    label="Reset Scenario"
                     variant="secondary"
                     size="md"
-                    onClick=${() => setDemoOrders(buildDemoOrders())}
+                    onClick=${demoRuntime.resetDemo}
                   />
                 `}
           </div>
@@ -439,18 +368,148 @@ export function KDSDashboard() {
 
       ${!isSupabaseConfigured
         ? html`
+            <section className="kds-demo-surface">
+              <header className="kds-demo-surface__head">
+                <h2>Demo backend simulator</h2>
+                <p>
+                  In-memory simulation of Supabase tables, transition rules and
+                  <code>order_events</code> audit stream.
+                </p>
+              </header>
+
+              <div className="kds-demo-layout">
+                <section className="kds-demo-card">
+                  <p className="kds-demo-card__title">Scenario actions</p>
+                  <div className="kds-demo-actions">
+                    <${TouchButton}
+                      label="Insert Mock Order"
+                      variant="secondary"
+                      size="md"
+                      onClick=${demoRuntime.createDemoOrder}
+                    />
+                    <${TouchButton}
+                      label="Run Logic Step"
+                      variant="forward"
+                      size="md"
+                      onClick=${demoRuntime.runScenarioStep}
+                    />
+                    <${TouchButton}
+                      label=${demoRuntime.autoplayEnabled
+                        ? "Autoplay: ON"
+                        : "Autoplay: OFF"}
+                      variant="passive"
+                      size="md"
+                      isActive=${demoRuntime.autoplayEnabled}
+                      onClick=${() =>
+                        demoRuntime.setAutoplayEnabled(
+                          (current) => !current
+                        )}
+                    />
+                    <${TouchButton}
+                      label="Advance New -> Prep"
+                      variant="forward"
+                      size="md"
+                      onClick=${demoRuntime.advanceOldestNew}
+                    />
+                    <${TouchButton}
+                      label="Advance Prep -> Ready"
+                      variant="confirm"
+                      size="md"
+                      onClick=${demoRuntime.advanceOldestPrep}
+                    />
+                    <${TouchButton}
+                      label="Serve Ready Order"
+                      variant="confirm"
+                      size="md"
+                      onClick=${demoRuntime.serveOldestReady}
+                    />
+                    <${TouchButton}
+                      label="Cancel New Order"
+                      variant="reverse"
+                      size="md"
+                      onClick=${demoRuntime.cancelNewestNew}
+                    />
+                    <${TouchButton}
+                      label="Session Heartbeat"
+                      variant="secondary"
+                      size="md"
+                      onClick=${demoRuntime.touchSession}
+                    />
+                  </div>
+                </section>
+
+                <section className="kds-demo-card">
+                  <p className="kds-demo-card__title">Simulated table rows</p>
+                  <ul className="kds-demo-table-list">
+                    ${Object.entries(demoRuntime.tableCounts).map(
+                      ([tableName, count]) => html`
+                        <li key=${tableName} className="kds-demo-table-item">
+                          <code>${tableName}</code>
+                          <span>${count}</span>
+                        </li>
+                      `
+                    )}
+                  </ul>
+                  <div className="kds-demo-session">
+                    <p><strong>Session:</strong> ${demoRuntime.session.id}</p>
+                    <p>
+                      <strong>Station:</strong>
+                      ${demoRuntime.stations.find(
+                        (station) =>
+                          station.id === demoRuntime.session.station_id
+                      )?.name ?? "Unassigned"}
+                    </p>
+                    <p>
+                      <strong>Last seen:</strong>
+                      ${formatEventTime(demoRuntime.session.last_seen_at)}
+                    </p>
+                  </div>
+                </section>
+
+                <section className="kds-demo-card">
+                  <p className="kds-demo-card__title">Recent order_events</p>
+                  <ul className="kds-demo-events">
+                    ${demoRuntime.events.slice(0, 10).map(
+                      (event) => html`
+                        <li key=${event.id} className="kds-demo-event">
+                          <div className="kds-demo-event__top">
+                            <span className="kds-demo-event__type"
+                              >${formatEventType(event.event_type)}</span
+                            >
+                            <time>${formatEventTime(event.created_at)}</time>
+                          </div>
+                          <p className="kds-demo-event__meta">
+                            Order #${event.order_number}
+                            <span>${formatEventTransition(event)}</span>
+                          </p>
+                          ${event.reason_code
+                            ? html`
+                                <p className="kds-demo-event__reason">
+                                  reason: ${event.reason_code}
+                                </p>
+                              `
+                            : null}
+                        </li>
+                      `
+                    )}
+                  </ul>
+                </section>
+              </div>
+            </section>
+
             <section className="config-warning">
               <h2>Demo mode is active</h2>
               <p>
-                Set <code>window.__SUPABASE_URL__</code> and
+                You are viewing simulated KDS + database logic. Set
+                <code>window.__SUPABASE_URL__</code> and
                 <code>window.__SUPABASE_ANON_KEY__</code> in
-                <code>index.html</code> to enable live realtime updates.
+                <code>index.html</code> to switch to live Supabase mode.
               </p>
             </section>
           `
         : null}
 
-      ${isSupabaseConfigured && error ? html`<p className="error-banner">${error}</p>` : null}
+      ${activeError ? html`<p className="error-banner">${activeError}</p>` : null}
       ${isSupabaseConfigured && loading
         ? html`<p className="loading-banner">Loading kitchen orders...</p>`
         : null}
@@ -473,7 +532,7 @@ export function KDSDashboard() {
                 orders=${groupedOrders[column.key]}
                 nowMs=${nowMs}
                 onMoveOrder=${handleMoveOrder}
-                updatingOrderIds=${updatingOrderIds}
+                updatingOrderIds=${activeUpdatingOrderIds}
                 density=${density}
               />
             `
