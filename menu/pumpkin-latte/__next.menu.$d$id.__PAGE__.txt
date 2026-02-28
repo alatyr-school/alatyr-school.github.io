@@ -1,0 +1,6 @@
+1:"$Sreact.fragment"
+2:I[95438,["/_next/static/chunks/e79102b9f950b6e0.js","/_next/static/chunks/37a0d8fbe444798f.js"],"default"]
+3:I[97367,["/_next/static/chunks/ff1a16fafef87110.js","/_next/static/chunks/d2be314c3ece3fbe.js"],"OutletBoundary"]
+4:"$Sreact.suspense"
+0:{"buildId":"2Rw0W4rklJhY6BCX97wkJ","rsc":["$","$1","c",{"children":[["$","$L2",null,{"product":{"id":"pumpkin-latte","name":"Гарбузовий Латте","shortDescription":"Сезонний латте з гарбузовим пюре та спеціями","description":"Наш осінній бестселер повернувся! Еспресо з натуральним гарбузовим пюре, теплими спеціями (кориця, мускатний горіх, гвоздика) та збитими вершками зверху.","ingredients":"Еспресо, молоко, натуральне гарбузове пюре, кориця, мускатний горіх, гвоздика, збиті вершки","price":135,"category":"seasonal","image":"https://images.unsplash.com/photo-1574914629385-46448b767aec?w=800&q=80","badge":"Сезонне","seasonal":true},"relatedProducts":[]}],[["$","script","script-0",{"src":"/_next/static/chunks/37a0d8fbe444798f.js","async":true}]],["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"loading":null,"isPartial":false}
+5:null

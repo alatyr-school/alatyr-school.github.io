@@ -1,0 +1,3 @@
+:HL["/_next/static/chunks/c73ae4ed650567ad.css","style"]
+:HL["https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap","style"]
+0:{"buildId":"2Rw0W4rklJhY6BCX97wkJ","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"menu","paramType":null,"paramKey":"menu","hasRuntimePrefetch":false,"slots":{"children":{"name":"id","paramType":"d","paramKey":"coffee-beans-ethiopia","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":false}},"isRootLayout":false}},"isRootLayout":true},"staleTime":300}
