@@ -1,0 +1,17 @@
+services:
+  cafe-vitalia-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: deps
+    container_name: cafe-vitalia-dev
+    working_dir: /app
+    command: npx next dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - WATCHPACK_POLLING=true
