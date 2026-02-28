@@ -1,0 +1,473 @@
+export interface ProductOption {
+  label: string;
+  choices: { name: string; priceModifier: number }[];
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  shortDescription: string;
+  description: string;
+  ingredients: string;
+  price: number;
+  category: string;
+  image: string;
+  badge?: string;
+  options?: ProductOption[];
+  popular?: boolean;
+  seasonal?: boolean;
+}
+
+export const categories = [
+  { id: "all", name: "Усі", icon: "✦" },
+  { id: "coffee", name: "Кава", icon: "☕" },
+  { id: "tea", name: "Чай", icon: "🍵" },
+  { id: "cold", name: "Холодні напої", icon: "🧊" },
+  { id: "desserts", name: "Десерти", icon: "🍰" },
+  { id: "pastry", name: "Випічка", icon: "🥐" },
+  { id: "breakfast", name: "Сніданки", icon: "🍳" },
+  { id: "seasonal", name: "Сезонне", icon: "🌿" },
+  { id: "gifts", name: "Подарунки", icon: "🎁" },
+];
+
+export const products: Product[] = [
+  {
+    id: "espresso-classico",
+    name: "Еспресо Класіко",
+    shortDescription: "Насичений подвійний еспресо з оксамитовою крема",
+    description:
+      "Наш фірмовий еспресо — це бленд арабіки з Ефіопії та Колумбії, обсмажений до середнього ступеня. Кожна чашка — це баланс фруктових нот, карамельної солодкості та тривалого шоколадного післясмаку.",
+    ingredients: "100% арабіка (Ефіопія Yirgacheffe, Колумбія Supremo)",
+    price: 75,
+    category: "coffee",
+    image:
+      "https://images.unsplash.com/photo-1510707577719-ae7c14805e3a?w=800&q=80",
+    badge: "Хіт",
+    popular: true,
+    options: [
+      {
+        label: "Розмір",
+        choices: [
+          { name: "Сінгл (30мл)", priceModifier: 0 },
+          { name: "Допіо (60мл)", priceModifier: 25 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "cappuccino-vitalia",
+    name: "Капучіно Вітілія",
+    shortDescription: "Ніжна молочна піна та ідеальний баланс смаку",
+    description:
+      "Наш авторський капучіно з ідеальним співвідношенням еспресо, молока та повітряної піни. Подається з латте-артом від наших бариста. Використовуємо лише фермерське молоко.",
+    ingredients:
+      "Еспресо (100% арабіка), фермерське молоко, за бажанням — рослинне молоко",
+    price: 105,
+    category: "coffee",
+    image:
+      "https://images.unsplash.com/photo-1572442388796-11668a67e53d?w=800&q=80",
+    badge: "Авторський",
+    popular: true,
+    options: [
+      {
+        label: "Розмір",
+        choices: [
+          { name: "Стандарт (250мл)", priceModifier: 0 },
+          { name: "Великий (350мл)", priceModifier: 30 },
+        ],
+      },
+      {
+        label: "Молоко",
+        choices: [
+          { name: "Коров'яче", priceModifier: 0 },
+          { name: "Вівсяне", priceModifier: 20 },
+          { name: "Мигдальне", priceModifier: 25 },
+          { name: "Кокосове", priceModifier: 25 },
+        ],
+      },
+      {
+        label: "Сироп",
+        choices: [
+          { name: "Без сиропу", priceModifier: 0 },
+          { name: "Ваніль", priceModifier: 15 },
+          { name: "Карамель", priceModifier: 15 },
+          { name: "Лісний горіх", priceModifier: 15 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "flat-white",
+    name: "Флет Вайт",
+    shortDescription: "Подвійний еспресо з мікропіною — для справжніх поціновувачів",
+    description:
+      "Австралійська класика в нашому виконанні. Подвійний шот еспресо залитий шовковистою мікропіною молока. Мінімум піни, максимум кавового смаку.",
+    ingredients: "Подвійний еспресо, текстуроване молоко",
+    price: 115,
+    category: "coffee",
+    image:
+      "https://images.unsplash.com/photo-1534778101976-62847782c213?w=800&q=80",
+    popular: true,
+    options: [
+      {
+        label: "Молоко",
+        choices: [
+          { name: "Коров'яче", priceModifier: 0 },
+          { name: "Вівсяне", priceModifier: 20 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "latte-caramel",
+    name: "Карамельний Латте",
+    shortDescription: "Солодкий латте з домашнім карамельним соусом",
+    description:
+      "Еспресо з парним молоком та нашим фірмовим карамельним соусом, який ми готуємо щодня з натурального масла та тростинного цукру. Зверху — хмарка молочної піни та карамельний дріззл.",
+    ingredients:
+      "Еспресо, молоко, домашній карамельний соус (масло, тростинний цукор, вершки)",
+    price: 125,
+    category: "coffee",
+    image:
+      "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?w=800&q=80",
+    badge: "Бестселер",
+    popular: true,
+    options: [
+      {
+        label: "Розмір",
+        choices: [
+          { name: "Стандарт (300мл)", priceModifier: 0 },
+          { name: "Великий (400мл)", priceModifier: 35 },
+        ],
+      },
+      {
+        label: "Молоко",
+        choices: [
+          { name: "Коров'яче", priceModifier: 0 },
+          { name: "Вівсяне", priceModifier: 20 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "matcha-latte",
+    name: "Матча Латте",
+    shortDescription: "Японська церемоніальна матча з вівсяним молоком",
+    description:
+      "Ми використовуємо преміальну церемоніальну матчу з японської префектури Удзі. Збиваємо її вручну бамбуковим часеном та поєднуємо з вівсяним молоком для ідеально кремової текстури.",
+    ingredients: "Церемоніальна матча (Удзі, Японія), вівсяне молоко",
+    price: 135,
+    category: "tea",
+    image:
+      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?w=800&q=80",
+    badge: "Новинка",
+    popular: true,
+    options: [
+      {
+        label: "Молоко",
+        choices: [
+          { name: "Вівсяне", priceModifier: 0 },
+          { name: "Коров'яче", priceModifier: 0 },
+          { name: "Мигдальне", priceModifier: 5 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "earl-grey",
+    name: "Ерл Грей Рояль",
+    shortDescription: "Класичний чай з бергамотом та вершками",
+    description:
+      "Витончений чорний чай з натуральним бергамотом, поданий з підігрітими вершками та тростинним цукром. Ідеальний для спокійного полудня.",
+    ingredients:
+      "Чорний чай (Шрі-Ланка), натуральна олія бергамоту, пелюстки волошки",
+    price: 85,
+    category: "tea",
+    image:
+      "https://images.unsplash.com/photo-1597318181409-cf64d0b5d8a2?w=800&q=80",
+    options: [
+      {
+        label: "Додатки",
+        choices: [
+          { name: "Без додатків", priceModifier: 0 },
+          { name: "З вершками", priceModifier: 20 },
+          { name: "З медом", priceModifier: 15 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "cold-brew",
+    name: "Колд Брю",
+    shortDescription: "24 години холодної екстракції для ідеальної м'якості",
+    description:
+      "Наш Cold Brew готується 24 години методом холодного заварювання. Результат — неймовірно м'який, солодкуватий напій без гіркоти, з нотами шоколаду та горіхів.",
+    ingredients: "100% арабіка крупного помелу, фільтрована вода",
+    price: 95,
+    category: "cold",
+    image:
+      "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?w=800&q=80",
+    popular: true,
+    options: [
+      {
+        label: "Розмір",
+        choices: [
+          { name: "Стандарт (300мл)", priceModifier: 0 },
+          { name: "Великий (500мл)", priceModifier: 35 },
+        ],
+      },
+      {
+        label: "Додатки",
+        choices: [
+          { name: "Класичний", priceModifier: 0 },
+          { name: "З тоніком", priceModifier: 25 },
+          { name: "З апельсиновим соком", priceModifier: 20 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "berry-smoothie",
+    name: "Ягідний Смузі",
+    shortDescription: "Мікс лісових ягід з йогуртом та медом",
+    description:
+      "Свіжий смузі з суміші лісових ягід — малина, чорниця, ожина — з натуральним грецьким йогуртом та квітковим медом. Подається з гранолою зверху.",
+    ingredients:
+      "Малина, чорниця, ожина, грецький йогурт, квітковий мед, гранола",
+    price: 115,
+    category: "cold",
+    image:
+      "https://images.unsplash.com/photo-1553530666-ba11a7da3888?w=800&q=80",
+    options: [
+      {
+        label: "Розмір",
+        choices: [
+          { name: "Стандарт (350мл)", priceModifier: 0 },
+          { name: "Великий (500мл)", priceModifier: 40 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "tiramisu",
+    name: "Тірамісу",
+    shortDescription: "Класичний італійський десерт з маскарпоне",
+    description:
+      "Наш тірамісу готується за оригінальним італійським рецептом: савоярді, просочені еспресо, крем з маскарпоне та яєць, пудра какао. Кожна порція — маленька Італія.",
+    ingredients:
+      "Маскарпоне, яйця, цукор, савоярді, еспресо, какао, марсала",
+    price: 155,
+    category: "desserts",
+    image:
+      "https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?w=800&q=80",
+    badge: "Хіт",
+    popular: true,
+    options: [
+      {
+        label: "Порція",
+        choices: [
+          { name: "Стандартна", priceModifier: 0 },
+          { name: "Подвійна", priceModifier: 75 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "cheesecake-berry",
+    name: "Чізкейк з ягодами",
+    shortDescription: "Ніжний чізкейк Нью-Йорк з сезонними ягодами",
+    description:
+      "Класичний New York Cheesecake з крем-сиром Philadelphia, на хрусткій основі з печива. Зверху — соус з сезонних ягід та свіжі ягоди.",
+    ingredients:
+      "Крем-сир Philadelphia, яйця, вершки, цукор, ванільний екстракт, печиво, масло, сезонні ягоди",
+    price: 165,
+    category: "desserts",
+    image:
+      "https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=800&q=80",
+    popular: true,
+  },
+  {
+    id: "chocolate-fondant",
+    name: "Шоколадний Фондан",
+    shortDescription: "Теплий шоколадний кейк з рідкою серцевиною",
+    description:
+      "Теплий шоколадний кейк з рідким шоколадним серцем всередині. Готується з бельгійського шоколаду 70% та подається з кулькою ванільного морозива.",
+    ingredients:
+      "Бельгійський шоколад 70%, масло, яйця, цукор, борошно, ванільне морозиво",
+    price: 175,
+    category: "desserts",
+    image:
+      "https://images.unsplash.com/photo-1606313564200-e75d5e30476c?w=800&q=80",
+    badge: "Преміум",
+  },
+  {
+    id: "croissant-butter",
+    name: "Круасан класичний",
+    shortDescription: "Хрусткий французький круасан на натуральному маслі",
+    description:
+      "Наші круасани випікаються щоранку з тіста, яке ферментується 48 годин. 100% натуральне масло, ніяких замінників. Хрустка золотиста скоринка та ніжні шари всередині.",
+    ingredients: "Борошно, натуральне масло 82%, дріжджі, цукор, сіль, молоко",
+    price: 65,
+    category: "pastry",
+    image:
+      "https://images.unsplash.com/photo-1555507036-ab1f4038024a?w=800&q=80",
+    badge: "Свіже",
+    popular: true,
+    options: [
+      {
+        label: "Начинка",
+        choices: [
+          { name: "Класичний (без начинки)", priceModifier: 0 },
+          { name: "З шоколадом", priceModifier: 20 },
+          { name: "З мигдальним кремом", priceModifier: 25 },
+          { name: "З шинкою та сиром", priceModifier: 35 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "cinnamon-roll",
+    name: "Синабон",
+    shortDescription: "Ароматна булочка з корицею та вершковою глазур'ю",
+    description:
+      "Наш фірмовий синабон — це пухке тісто, щедро просочене маслом з корицею та коричневим цукром, зверху — глазур з крем-сиру. Подається теплим.",
+    ingredients:
+      "Борошно, масло, кориця, коричневий цукор, крем-сир, цукрова пудра, ваніль",
+    price: 85,
+    category: "pastry",
+    image:
+      "https://images.unsplash.com/photo-1609127886845-0a56dde1a08e?w=800&q=80",
+  },
+  {
+    id: "avocado-toast",
+    name: "Авокадо Тост",
+    shortDescription: "Тост з гуакамоле, яйцем пашот та мікрозеленню",
+    description:
+      "Хрусткий тост з ремісничого хліба на заквасці, щедрий шар домашнього гуакамоле, яйце пашот з рідким жовтком, мікрозелень та пластівці чилі.",
+    ingredients:
+      "Хліб на заквасці, авокадо, лайм, яйце, мікрозелень, чилі, оливкова олія, сіль",
+    price: 175,
+    category: "breakfast",
+    image:
+      "https://images.unsplash.com/photo-1541519227354-08fa5d50c44d?w=800&q=80",
+    badge: "Популярне",
+    popular: true,
+    options: [
+      {
+        label: "Додатки",
+        choices: [
+          { name: "Класичний", priceModifier: 0 },
+          { name: "+ Лосось", priceModifier: 65 },
+          { name: "+ Бекон", priceModifier: 45 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "pancakes",
+    name: "Панкейки з ягодами",
+    shortDescription: "Пухкі панкейки з кленовим сиропом та свіжими ягодами",
+    description:
+      "Три пухкі панкейки з натуральної ваніллю, подані з кленовим сиропом, свіжими ягодами, збитими вершками та м'ятою.",
+    ingredients:
+      "Борошно, яйця, молоко, ваніль, кленовий сироп, сезонні ягоди, збиті вершки",
+    price: 155,
+    category: "breakfast",
+    image:
+      "https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=800&q=80",
+  },
+  {
+    id: "granola-bowl",
+    name: "Гранола Боул",
+    shortDescription: "Домашня гранола з йогуртом, фруктами та медом",
+    description:
+      "Наша домашня гранола з вівсяних пластівців, горіхів та насіння, запечена з медом. Подається з грецьким йогуртом, сезонними фруктами та ягодами.",
+    ingredients:
+      "Вівсяні пластівці, мигдаль, волоський горіх, мед, грецький йогурт, сезонні фрукти",
+    price: 135,
+    category: "breakfast",
+    image:
+      "https://images.unsplash.com/photo-1511690743698-d9d18f7e20f1?w=800&q=80",
+  },
+  {
+    id: "pumpkin-latte",
+    name: "Гарбузовий Латте",
+    shortDescription: "Сезонний латте з гарбузовим пюре та спеціями",
+    description:
+      "Наш осінній бестселер повернувся! Еспресо з натуральним гарбузовим пюре, теплими спеціями (кориця, мускатний горіх, гвоздика) та збитими вершками зверху.",
+    ingredients:
+      "Еспресо, молоко, натуральне гарбузове пюре, кориця, мускатний горіх, гвоздика, збиті вершки",
+    price: 135,
+    category: "seasonal",
+    image:
+      "https://images.unsplash.com/photo-1574914629385-46448b767aec?w=800&q=80",
+    badge: "Сезонне",
+    seasonal: true,
+  },
+  {
+    id: "gift-set-classic",
+    name: "Подарунковий набір «Класика»",
+    shortDescription: "Зернова кава + чашка ручної роботи + печиво",
+    description:
+      "Ідеальний подарунок для поціновувача кави: 250г нашої фірмової зернової кави, керамічна чашка ручної роботи від місцевої майстерні та набір фірмового печива (6шт). У стильній крафтовій коробці.",
+    ingredients:
+      "Зернова кава 250г, керамічна чашка, фірмове печиво (6шт), листівка",
+    price: 650,
+    category: "gifts",
+    image:
+      "https://images.unsplash.com/photo-1577968897966-3d4325b36b61?w=800&q=80",
+    badge: "Подарунок",
+  },
+  {
+    id: "coffee-beans-ethiopia",
+    name: "Зернова кава «Ефіопія»",
+    shortDescription: "Single origin зерна з регіону Yirgacheffe, 250г",
+    description:
+      "Single origin кава з ефіопського регіону Yirgacheffe. Яскраві фруктові та квіткові ноти, легка кислинка, медовий фініш. Свіжа обсмажка щотижня.",
+    ingredients: "100% арабіка, Ефіопія, регіон Yirgacheffe, обсмажка Light-Medium",
+    price: 320,
+    category: "gifts",
+    image:
+      "https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=800&q=80",
+    options: [
+      {
+        label: "Вага",
+        choices: [
+          { name: "250г", priceModifier: 0 },
+          { name: "500г", priceModifier: 250 },
+          { name: "1кг", priceModifier: 480 },
+        ],
+      },
+      {
+        label: "Помел",
+        choices: [
+          { name: "Зерно", priceModifier: 0 },
+          { name: "Під еспресо", priceModifier: 0 },
+          { name: "Під фільтр", priceModifier: 0 },
+          { name: "Під турку", priceModifier: 0 },
+        ],
+      },
+    ],
+  },
+];
+
+export function getProductById(id: string): Product | undefined {
+  return products.find((p) => p.id === id);
+}
+
+export function getProductsByCategory(category: string): Product[] {
+  if (category === "all") return products;
+  return products.filter((p) => p.category === category);
+}
+
+export function getPopularProducts(): Product[] {
+  return products.filter((p) => p.popular);
+}
+
+export function getRelatedProducts(productId: string, limit = 4): Product[] {
+  const product = getProductById(productId);
+  if (!product) return [];
+  return products
+    .filter((p) => p.id !== productId && p.category === product.category)
+    .slice(0, limit);
+}
