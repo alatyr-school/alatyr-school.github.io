@@ -21,6 +21,45 @@ const COLUMN_PRESENTATION = {
   ready: { sequence: "03", subtitle: "Handoff window" },
 };
 
+const VIEW_QUERY_KEY = "view";
+
+function normalizeWorkspaceMode(rawValue) {
+  if (rawValue === "split") return "split";
+  if (rawValue === "kds" || rawValue === "operations") return "operations";
+  return "venue";
+}
+
+function readWorkspaceModeFromLocation() {
+  if (!globalThis.location) {
+    return "venue";
+  }
+  try {
+    const currentUrl = new URL(globalThis.location.href);
+    return normalizeWorkspaceMode(currentUrl.searchParams.get(VIEW_QUERY_KEY));
+  } catch {
+    return "venue";
+  }
+}
+
+function workspaceModeToQuery(mode) {
+  if (mode === "operations") return "kds";
+  if (mode === "split") return "split";
+  return "venue";
+}
+
+function buildWorkspaceHref(mode) {
+  if (!globalThis.location) {
+    return "";
+  }
+  try {
+    const currentUrl = new URL(globalThis.location.href);
+    currentUrl.searchParams.set(VIEW_QUERY_KEY, workspaceModeToQuery(mode));
+    return `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`;
+  } catch {
+    return "";
+  }
+}
+
 function statusClass(connectionState) {
   if (connectionState === "live") return "status-pill status-pill--live";
   if (connectionState === "error") return "status-pill status-pill--error";
@@ -111,7 +150,7 @@ export function KDSDashboard() {
   const [density, setDensity] = useState("comfortable");
   const [sortMode, setSortMode] = useState("oldest");
   const [audioEnabled, setAudioEnabled] = useState(false);
-  const [workspaceMode, setWorkspaceMode] = useState("venue");
+  const [workspaceMode, setWorkspaceMode] = useState(() => readWorkspaceModeFromLocation());
   const previousLateOrderIdsRef = useRef(new Set());
   const {
     orders,
@@ -132,6 +171,30 @@ export function KDSDashboard() {
 
     return () => globalThis.clearInterval(timerId);
   }, []);
+
+  useEffect(() => {
+    const onPopState = () => {
+      setWorkspaceMode(readWorkspaceModeFromLocation());
+    };
+    globalThis.addEventListener("popstate", onPopState);
+    return () => {
+      globalThis.removeEventListener("popstate", onPopState);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!globalThis.location || !globalThis.history?.replaceState) {
+      return;
+    }
+    const currentMode = readWorkspaceModeFromLocation();
+    if (currentMode === workspaceMode) {
+      return;
+    }
+    const nextHref = buildWorkspaceHref(workspaceMode);
+    if (nextHref) {
+      globalThis.history.replaceState(null, "", nextHref);
+    }
+  }, [workspaceMode]);
 
   const activeOrders = isSupabaseConfigured ? orders : demoRuntime.orders;
   const workflowOrders = useMemo(
@@ -248,6 +311,9 @@ export function KDSDashboard() {
     : "Demo DB";
   const queueHealthLabel =
     lateOrders > 0 ? `${lateOrders} delayed` : "On cadence";
+  const venueHref = buildWorkspaceHref("venue");
+  const splitHref = buildWorkspaceHref("split");
+  const kdsHref = buildWorkspaceHref("operations");
   const openDemoAnomalies = demoRuntime.anomalies.filter((entry) =>
     ["open", "acknowledged"].includes(entry.status)
   );
@@ -385,6 +451,11 @@ export function KDSDashboard() {
                 isActive=${workspaceMode === "operations"}
                 onClick=${() => setWorkspaceMode("operations")}
               />
+            </div>
+            <div className="toolbar-links">
+              <a className="toolbar-link" href=${venueHref}>Direct venue URL</a>
+              <a className="toolbar-link" href=${splitHref}>Direct split URL</a>
+              <a className="toolbar-link" href=${kdsHref}>Direct KDS URL</a>
             </div>
           </div>
         </section>

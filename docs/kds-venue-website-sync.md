@@ -17,6 +17,14 @@ This module adds a customer-facing premium website panel directly into the app a
   - KDS workflow columns (`New/Prep/Ready`)
   - audit/event streams.
 
+## Direct view URLs
+
+Dashboard now supports URL-driven workspace modes:
+
+- `?view=venue` — venue website focused view
+- `?view=split` — website + operations split
+- `?view=kds` — KDS operations only
+
 ## Website order bundles (demo)
 
 - Signature Smash Combo
