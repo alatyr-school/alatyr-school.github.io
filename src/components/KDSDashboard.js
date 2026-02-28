@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import htm from "htm";
 import { KanbanColumn } from "./KanbanColumn.js";
+import { VenueSiteShowcase } from "./VenueSiteShowcase.js";
 import { useKitchenOrders } from "../hooks/useKitchenOrders.js";
 import { useKdsDemoRuntime } from "../hooks/useKdsDemoRuntime.js";
 import {
@@ -228,6 +229,16 @@ export function KDSDashboard() {
     [demoRuntime, isSupabaseConfigured, moveOrder]
   );
 
+  const handleCreateWebsiteOrder = useCallback(
+    (packageKey) => {
+      if (isSupabaseConfigured) {
+        return;
+      }
+      demoRuntime.createWebsiteOrder(packageKey);
+    },
+    [demoRuntime, isSupabaseConfigured]
+  );
+
   const currentConnectionState = isSupabaseConfigured ? connectionState : "demo";
   const currentConnectionLabel = isSupabaseConfigured
     ? connectionState === "live"
@@ -383,6 +394,15 @@ export function KDSDashboard() {
           />
         </div>
       </section>
+
+      <${VenueSiteShowcase}
+        orders=${activeOrders}
+        nowMs=${nowMs}
+        isSupabaseConfigured=${isSupabaseConfigured}
+        websitePackages=${demoRuntime.websitePackages}
+        onCreateWebsiteOrder=${handleCreateWebsiteOrder}
+        connectionLabel=${currentConnectionLabel}
+      />
 
       ${!isSupabaseConfigured
         ? html`

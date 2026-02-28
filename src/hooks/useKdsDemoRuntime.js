@@ -44,6 +44,39 @@ const DEMO_MENU = [
   },
 ];
 
+const DEMO_WEBSITE_PACKAGES = [
+  {
+    key: "signature",
+    title: "Signature Smash Combo",
+    description: "Classic Burger + Fries + Milkshake",
+    priceLabel: "$12.90",
+    priority: "normal",
+    source: "web",
+    templateNames: ["Classic Burger", "Fries", "Milkshake"],
+    specialInstructions: "Website checkout: Signature Smash Combo",
+  },
+  {
+    key: "family",
+    title: "Family Mix Pack",
+    description: "2x Double Cheeseburger + Fries + Onion Rings",
+    priceLabel: "$29.90",
+    priority: "rush",
+    source: "web",
+    templateNames: ["Double Cheeseburger", "Double Cheeseburger", "Fries", "Onion Rings"],
+    specialInstructions: "Website checkout: Family Mix Pack",
+  },
+  {
+    key: "late-night",
+    title: "Late Night Fuel",
+    description: "Chicken Burger + Onion Rings + Milkshake",
+    priceLabel: "$15.40",
+    priority: "normal",
+    source: "web",
+    templateNames: ["Chicken Burger", "Onion Rings", "Milkshake"],
+    specialInstructions: "Website checkout: Late Night Fuel",
+  },
+];
+
 const ANALYSIS_SCAN_NAME = "demo_runtime_scan";
 const RECOVERY_STEP_PENDING = "pending";
 const RECOVERY_STEP_IN_PROGRESS = "in_progress";
@@ -841,92 +874,148 @@ export function useKdsDemoRuntime({ enabled }) {
     [appendAnomaly, appendCommandLog, appendEvent, appendTechnicalEvent, enabled, patchCommandLog, session.id, session.staff_user_id, touchSession]
   );
 
-  const createDemoOrder = useCallback(() => {
-    if (!enabled) {
-      return;
-    }
+  const createDemoOrder = useCallback(
+    (options = {}) => {
+      if (!enabled) {
+        return null;
+      }
 
-    const commandId = createId("demo-command");
-    const traceId = createId("demo-trace");
-    appendCommandLog({
-      id: commandId,
-      trace_id: traceId,
-      order_id: null,
-      command_type: "insert_order",
-      requested_to_status: "new",
-      actor_user_id: session.staff_user_id,
-      actor_session_id: session.id,
-      result: "accepted",
-      started_at: nowIso(),
-      finished_at: nowIso(),
-    });
+      const commandId = createId("demo-command");
+      const traceId = createId("demo-trace");
+      appendCommandLog({
+        id: commandId,
+        trace_id: traceId,
+        order_id: null,
+        command_type: options.commandType ?? "insert_order",
+        requested_to_status: "new",
+        actor_user_id: session.staff_user_id,
+        actor_session_id: session.id,
+        result: "accepted",
+        started_at: nowIso(),
+        finished_at: nowIso(),
+      });
 
-    const newOrderNumber = orderNumberRef.current++;
-    const isoNow = nowIso();
-    const selectedItems = Array.from(
-      { length: Math.floor(Math.random() * 2) + 1 },
-      () => randomFrom(DEMO_MENU)
-    );
+      const newOrderNumber = orderNumberRef.current++;
+      const isoNow = nowIso();
 
-    const orderItems = selectedItems.map((template, index) => {
-      const modifiers = template.modifiers_pool.filter(() => Math.random() > 0.55).slice(0, 2);
-      return {
-        id: createId("demo-item"),
-        line_number: index + 1,
-        item_name: template.item_name,
-        quantity: Math.floor(Math.random() * 2) + 1,
-        station_id: template.station_id,
-        modifiers,
-        position: index + 1,
+      const templateNames = Array.isArray(options.templateNames)
+        ? options.templateNames
+        : [];
+      const chosenTemplates =
+        templateNames.length > 0
+          ? templateNames
+              .map((templateName) =>
+                DEMO_MENU.find((menuItem) => menuItem.item_name === templateName)
+              )
+              .filter(Boolean)
+          : [];
+      const selectedItems =
+        chosenTemplates.length > 0
+          ? chosenTemplates
+          : Array.from(
+              { length: Math.floor(Math.random() * 2) + 1 },
+              () => randomFrom(DEMO_MENU)
+            );
+
+      const orderItems = selectedItems.map((template, index) => {
+        const modifiers = template.modifiers_pool
+          .filter(() => Math.random() > 0.55)
+          .slice(0, 2);
+        return {
+          id: createId("demo-item"),
+          line_number: index + 1,
+          item_name: template.item_name,
+          quantity: Math.floor(Math.random() * 2) + 1,
+          station_id: template.station_id,
+          modifiers,
+          position: index + 1,
+        };
+      });
+
+      const station =
+        DEMO_STATIONS.find((candidate) => candidate.id === options.stationId) ??
+        randomFrom(DEMO_STATIONS);
+
+      const order = {
+        id: createId("demo-order"),
+        business_date: isoNow.slice(0, 10),
+        order_number: newOrderNumber,
+        status: "new",
+        source: options.source ?? randomFrom(["pos", "web", "kiosk"]),
+        priority: options.priority ?? randomFrom(["normal", "normal", "rush", "vip"]),
+        station_id: station.id,
+        placed_at: isoNow,
+        started_at: null,
+        ready_at: null,
+        served_at: null,
+        cancelled_at: null,
+        special_instructions:
+          options.specialInstructions ??
+          (Math.random() > 0.7 ? "Customer allergy note" : null),
+        state_version: 1,
+        updated_at: isoNow,
+        order_items: orderItems,
       };
-    });
 
-    const station = randomFrom(DEMO_STATIONS);
-    const order = {
-      id: createId("demo-order"),
-      business_date: isoNow.slice(0, 10),
-      order_number: newOrderNumber,
-      status: "new",
-      source: randomFrom(["pos", "web", "kiosk"]),
-      priority: randomFrom(["normal", "normal", "rush", "vip"]),
-      station_id: station.id,
-      placed_at: isoNow,
-      started_at: null,
-      ready_at: null,
-      served_at: null,
-      cancelled_at: null,
-      special_instructions: Math.random() > 0.7 ? "Customer allergy note" : null,
-      state_version: 1,
-      updated_at: isoNow,
-      order_items: orderItems,
-    };
+      const nextOrders = [...ordersRef.current, order].sort(
+        (a, b) => new Date(a.placed_at).getTime() - new Date(b.placed_at).getTime()
+      );
+      ordersRef.current = nextOrders;
+      setOrders(nextOrders);
+      setError("");
+      touchSession();
 
-    const nextOrders = [...ordersRef.current, order].sort(
-      (a, b) => new Date(a.placed_at).getTime() - new Date(b.placed_at).getTime()
-    );
-    ordersRef.current = nextOrders;
-    setOrders(nextOrders);
-    setError("");
-    touchSession();
+      appendEvent({
+        order_id: order.id,
+        order_number: order.order_number,
+        event_type: "order_created",
+        from_status: null,
+        to_status: "new",
+        station_id: order.station_id,
+        reason_code: null,
+        version_after: 1,
+        command_id: commandId,
+        trace_id: traceId,
+        payload: {
+          source: order.source,
+          priority: order.priority,
+          inserted_via: options.insertedVia ?? "demo_control",
+        },
+      });
 
-    appendEvent({
-      order_id: order.id,
-      order_number: order.order_number,
-      event_type: "order_created",
-      from_status: null,
-      to_status: "new",
-      station_id: order.station_id,
-      reason_code: null,
-      version_after: 1,
-      command_id: commandId,
-      trace_id: traceId,
-      payload: {
-        source: order.source,
-        priority: order.priority,
-        inserted_via: "demo_control",
-      },
-    });
-  }, [appendCommandLog, appendEvent, enabled, session.id, session.staff_user_id, touchSession]);
+      return order;
+    },
+    [appendCommandLog, appendEvent, enabled, session.id, session.staff_user_id, touchSession]
+  );
+
+  const createWebsiteOrder = useCallback(
+    (packageKey = "signature") => {
+      const selectedPackage =
+        DEMO_WEBSITE_PACKAGES.find((entry) => entry.key === packageKey) ??
+        DEMO_WEBSITE_PACKAGES[0];
+
+      const order = createDemoOrder({
+        source: selectedPackage.source,
+        priority: selectedPackage.priority,
+        templateNames: selectedPackage.templateNames,
+        specialInstructions: selectedPackage.specialInstructions,
+        insertedVia: "website_showcase",
+        commandType: "insert_web_order",
+      });
+
+      if (order) {
+        appendTechnicalEvent({
+          severity: "info",
+          component: "website",
+          event_name: "website_order_created",
+          order_id: order.id,
+          message: `Website order created from package: ${selectedPackage.key}`,
+          payload: { package_key: selectedPackage.key, order_number: order.order_number },
+        });
+      }
+    },
+    [appendTechnicalEvent, createDemoOrder]
+  );
 
   const pickOrder = useCallback((status, direction = "oldest") => {
     const filtered = ordersRef.current
@@ -1611,6 +1700,7 @@ export function useKdsDemoRuntime({ enabled }) {
 
   return {
     stations: DEMO_STATIONS,
+    websitePackages: DEMO_WEBSITE_PACKAGES,
     orders,
     events,
     session,
@@ -1636,6 +1726,7 @@ export function useKdsDemoRuntime({ enabled }) {
     resetDemo,
     moveOrder,
     createDemoOrder,
+    createWebsiteOrder,
     runScenarioStep,
     touchSession,
     advanceOldestNew,
