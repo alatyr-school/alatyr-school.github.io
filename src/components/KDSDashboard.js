@@ -111,6 +111,7 @@ export function KDSDashboard() {
   const [density, setDensity] = useState("comfortable");
   const [sortMode, setSortMode] = useState("oldest");
   const [audioEnabled, setAudioEnabled] = useState(false);
+  const [workspaceMode, setWorkspaceMode] = useState("venue");
   const previousLateOrderIdsRef = useRef(new Set());
   const {
     orders,
@@ -359,52 +360,87 @@ export function KDSDashboard() {
               />
             </div>
           </div>
+
+          <div className="control-cluster control-cluster--experience">
+            <span className="toolbar-label">View</span>
+            <div className="toolbar-actions">
+              <${TouchButton}
+                label="Venue Site"
+                variant="secondary"
+                size="md"
+                isActive=${workspaceMode === "venue"}
+                onClick=${() => setWorkspaceMode("venue")}
+              />
+              <${TouchButton}
+                label="Split"
+                variant="passive"
+                size="md"
+                isActive=${workspaceMode === "split"}
+                onClick=${() => setWorkspaceMode("split")}
+              />
+              <${TouchButton}
+                label="KDS Only"
+                variant="passive"
+                size="md"
+                isActive=${workspaceMode === "operations"}
+                onClick=${() => setWorkspaceMode("operations")}
+              />
+            </div>
+          </div>
         </section>
       </section>
 
-      <section className="kds-metrics-surface">
-        <header className="kds-metrics-surface__head">
-          <h2>Service metrics</h2>
-          <p>Executive view of queue pressure and handoff readiness</p>
-        </header>
-        <div className="metrics-grid">
-          <${MetricTile}
-            label="Active Orders"
-            value=${String(totalOrders)}
-            tone=${queueTone}
-            helper="Across all stations"
-          />
-          <${MetricTile}
-            label="Late Orders"
-            value=${String(lateOrders)}
-            tone=${lateOrders > 0 ? "danger" : "success"}
-            helper="15+ minutes"
-          />
-          <${MetricTile}
-            label="Average Wait"
-            value=${averageWait}
-            tone="default"
-            helper="Placed to now"
-          />
-          <${MetricTile}
-            label="Ready to Serve"
-            value=${String(readyOrders)}
-            tone="success"
-            helper="Handoff lane"
-          />
-        </div>
-      </section>
+      ${workspaceMode !== "operations"
+        ? html`
+            <${VenueSiteShowcase}
+              orders=${activeOrders}
+              nowMs=${nowMs}
+              isSupabaseConfigured=${isSupabaseConfigured}
+              websitePackages=${demoRuntime.websitePackages}
+              onCreateWebsiteOrder=${handleCreateWebsiteOrder}
+              connectionLabel=${currentConnectionLabel}
+            />
+          `
+        : null}
 
-      <${VenueSiteShowcase}
-        orders=${activeOrders}
-        nowMs=${nowMs}
-        isSupabaseConfigured=${isSupabaseConfigured}
-        websitePackages=${demoRuntime.websitePackages}
-        onCreateWebsiteOrder=${handleCreateWebsiteOrder}
-        connectionLabel=${currentConnectionLabel}
-      />
+      ${workspaceMode !== "venue"
+        ? html`
+            <section className="kds-metrics-surface">
+              <header className="kds-metrics-surface__head">
+                <h2>Service metrics</h2>
+                <p>Executive view of queue pressure and handoff readiness</p>
+              </header>
+              <div className="metrics-grid">
+                <${MetricTile}
+                  label="Active Orders"
+                  value=${String(totalOrders)}
+                  tone=${queueTone}
+                  helper="Across all stations"
+                />
+                <${MetricTile}
+                  label="Late Orders"
+                  value=${String(lateOrders)}
+                  tone=${lateOrders > 0 ? "danger" : "success"}
+                  helper="15+ minutes"
+                />
+                <${MetricTile}
+                  label="Average Wait"
+                  value=${averageWait}
+                  tone="default"
+                  helper="Placed to now"
+                />
+                <${MetricTile}
+                  label="Ready to Serve"
+                  value=${String(readyOrders)}
+                  tone="success"
+                  helper="Handoff lane"
+                />
+              </div>
+            </section>
+          `
+        : null}
 
-      ${!isSupabaseConfigured
+      ${workspaceMode !== "venue" && !isSupabaseConfigured
         ? html`
             <section className="kds-demo-surface">
               <header className="kds-demo-surface__head">
@@ -810,35 +846,39 @@ export function KDSDashboard() {
         : null}
 
       ${activeError ? html`<p className="error-banner">${activeError}</p>` : null}
-      ${isSupabaseConfigured && loading
+      ${workspaceMode !== "venue" && isSupabaseConfigured && loading
         ? html`<p className="loading-banner">Loading kitchen orders...</p>`
         : null}
 
-      <section className="kds-workflow-surface">
-        <header className="kds-workflow-surface__head">
-          <h2>Workflow board</h2>
-          <p>Follow the production path from intake to final pickup.</p>
-        </header>
+      ${workspaceMode !== "venue"
+        ? html`
+            <section className="kds-workflow-surface">
+              <header className="kds-workflow-surface__head">
+                <h2>Workflow board</h2>
+                <p>Follow the production path from intake to final pickup.</p>
+              </header>
 
-        <section className="kds-board" data-density=${density}>
-          ${BOARD_COLUMNS.map(
-            (column) => html`
-              <${KanbanColumn}
-                key=${column.key}
-                title=${column.title}
-                subtitle=${COLUMN_PRESENTATION[column.key].subtitle}
-                sequence=${COLUMN_PRESENTATION[column.key].sequence}
-                statusKey=${column.key}
-                orders=${groupedOrders[column.key]}
-                nowMs=${nowMs}
-                onMoveOrder=${handleMoveOrder}
-                updatingOrderIds=${activeUpdatingOrderIds}
-                density=${density}
-              />
-            `
-          )}
-        </section>
-      </section>
+              <section className="kds-board" data-density=${density}>
+                ${BOARD_COLUMNS.map(
+                  (column) => html`
+                    <${KanbanColumn}
+                      key=${column.key}
+                      title=${column.title}
+                      subtitle=${COLUMN_PRESENTATION[column.key].subtitle}
+                      sequence=${COLUMN_PRESENTATION[column.key].sequence}
+                      statusKey=${column.key}
+                      orders=${groupedOrders[column.key]}
+                      nowMs=${nowMs}
+                      onMoveOrder=${handleMoveOrder}
+                      updatingOrderIds=${activeUpdatingOrderIds}
+                      density=${density}
+                    />
+                  `
+                )}
+              </section>
+            </section>
+          `
+        : null}
     </main>
   `;
 }

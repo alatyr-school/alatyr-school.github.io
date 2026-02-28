@@ -191,7 +191,7 @@ body {
   padding: var(--space-4);
   display: grid;
   gap: var(--space-4);
-  grid-template-columns: minmax(18rem, 1.8fr) repeat(3, minmax(10rem, 1fr));
+  grid-template-columns: minmax(18rem, 1.8fr) repeat(4, minmax(10rem, 1fr));
 }
 
 .control-cluster {
